@@ -297,7 +297,11 @@ class Store:
                 if key in by_iid:
                     by_iid.move_to_end(key)    # 同 iid 保留最后一次（最新状态）
                 by_iid[key] = d
-            for d in reversed(list(by_iid.values())):
+            # by_iid 的键序 = 各链最后一次出现的先后（旧→新）。逐条 appendleft
+            # 后最新更新的链在最前——与在线 add_incident（移除旧条目+appendleft）
+            # 完全一致。不能 reversed：那会把「最后更新最旧」的链顶到最前，
+            # 重启后总览/威胁指数取到错误子集，溢出时反而淘汰最新链。
+            for d in by_iid.values():
                 self.incidents.appendleft(d)
             self.meta["incidents_total"] = len(self.incidents)
         except Exception:
