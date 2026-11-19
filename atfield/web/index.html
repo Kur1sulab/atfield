@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>心之壁 · 终端安全态势融合平台</title>
 <script>
-/* 首帧定主题：必须在样式生效前跑，避免闪白/闪黑。默认浅色（纸白）。
-   旧版本默认是深色，老用户 localStorage 里留着 "dark"（多半不是主动选择）→
-   用 theme.v2 标记做一次性迁移到浅色，之后完全尊重用户自己点选。 */
+/* 首帧定主题：必须在样式生效前跑，避免闪白/闪黑。默认深色（石墨）。
+   旧版本曾用 theme.v2 一次性迁移到浅色（那不是用户主动选择）→
+   用 theme.v3 标记做一次性迁移回深色默认，之后完全尊重用户自己点选。 */
 (function () {
-  var t = "light";
+  var t = "dark";
   try {
     var s = localStorage.getItem("atfield.theme");
-    if (localStorage.getItem("atfield.theme.v2") !== "1") {
-      localStorage.setItem("atfield.theme.v2", "1");
+    if (localStorage.getItem("atfield.theme.v3") !== "1") {
+      localStorage.setItem("atfield.theme.v3", "1");
       s = null;
     }
     if (s === "dark" || s === "dusk" || s === "light") t = s;
@@ -77,9 +77,9 @@
       <div class="side-title">采集器状态</div>
       <div class="mini-list" id="collector-mini"></div>
       <div class="theme-sw" id="theme-sw" role="group" aria-label="界面主题">
-        <button class="tsw on" data-theme="light" title="纸白（浅色，默认）" aria-label="纸白主题"><i></i></button>
-        <button class="tsw" data-theme="dark" title="石墨（深色）" aria-label="石墨主题"><i></i></button>
+        <button class="tsw on" data-theme="dark" title="石墨（深色，默认）" aria-label="石墨主题"><i></i></button>
         <button class="tsw" data-theme="dusk" title="暖墨（暖色深底）" aria-label="暖墨主题"><i></i></button>
+        <button class="tsw" data-theme="light" title="纸白（浅色，可切换）" aria-label="纸白主题"><i></i></button>
         <span class="tsw-label">主题</span>
       </div>
       <div class="link-status">
