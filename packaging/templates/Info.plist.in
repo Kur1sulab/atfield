@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 由 packaging/build_app.sh 从 templates/Info.plist.in 渲染；不要手改 dist 内的副本。 -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>@APP_NAME@</string>
+	<key>CFBundleDisplayName</key>
+	<string>心之壁</string>
+	<key>CFBundleIdentifier</key>
+	<string>@BUNDLE_ID@</string>
+	<key>CFBundleExecutable</key>
+	<string>@EXECUTABLE@</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>@MIN_MACOS@</string>
+	<!-- LSUIElement=false：作为普通应用出现（Dock 可见、可被「打开方式」调用），
+	     而不是纯后台 agent。启动器是 bash 脚本，双击时不生成 Cocoa 窗口，
+	     控制台界面通过浏览器访问 http://127.0.0.1:8866/ 。 -->
+	<key>LSUIElement</key>
+	<false/>
+	<!-- 声明支持 Retina；对 bash 启动器本身无影响，但会让 Finder/系统按高分辨率渲染图标与元数据。 -->
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>心之壁 — 终端作战态势感知平台</string>
+	<!-- 明确不启用 App Sandbox：EDR 需要读取全机进程/网络/统一日志，沙箱下采集器会静默失效。 -->
+	<key>AppSandbox</key>
+	<false/>
+	<!-- 单实例：避免两个 Launcher 抢同一端口，第二个实例会被系统拒绝启动。 -->
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+</dict>
+</plist>

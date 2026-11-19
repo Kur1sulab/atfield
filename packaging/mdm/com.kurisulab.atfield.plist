@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  心之壁 MDM 配置基线（com.kurisulab.atfield.plist）
+  =====================================================================
+  结构严格对应 atfield/config.py 的 DEFAULTS：这里出现的键会与代码默认值做「深合并」，
+  数组键是整体替换（不是追加）。最终目的是落到每个用户机器上的 ~/.atfield/config.yaml。
+
+  部署路径（见 mdm/install.md）：
+    /Library/Application Support/ATField/config.yaml          ← MDM 脚本写入的全局基线
+    ~/.atfield/config.yaml                                    ← 每用户生效位置（launcher/LaunchAgent 引用）
+
+  重要前提：atfield/config.py 在 `import yaml` 失败时会「静默忽略」config.yaml。
+  因此用 MDM 下发配置前，必须确保目标机 python3 装有 PyYAML
+  （用 build_app.sh --bundle-runtime 打包的自包含版本已内置 psutil + PyYAML）。
+
+  校验：plutil -lint packaging/mdm/com.kurisulab.atfield.plist
+  转 YAML：见 mdm/install.md 里的 plutil -convert json + python 片段
+  =====================================================================
+-->
+<plist version="1.0">
+<dict>
+	<!-- ==================== 基础 ==================== -->
+	<!-- 主机标签；留空字符串表示用系统 hostname（gethostname）。 -->
+	<key>host_label</key>
+	<string></string>
+
+	<!-- data_dir 故意不在此处覆盖：
+	     代码默认值就是 ~/.atfield，写成绝对路径会破坏「每用户独立数据目录」。
+	     如需集中收集，请在采集侧（SIEM/Syslog）做，而不要改 data_dir。 -->
+
+	<!-- ==================== 服务监听 ==================== -->
+	<!--
+	  server.bind / port：控制台只绑回环地址。
+	  这是心之壁的安全基线：单机 EDR 控制台不应出现在局域网里。
+	  若确实需要远程访问，请用 SSH 端口转发（ssh -L 8866:127.0.0.1:8866 host），
+	  而不是把 bind 改成 0.0.0.0。
+	  open_browser=false：受管设备上不要自动拉起浏览器（会暴露给当前登录用户）。
+	-->
+	<key>server</key>
+	<dict>
+		<key>bind</key>
+		<string>127.0.0.1</string>
+		<key>port</key>
+		<integer>8866</integer>
+		<key>open_browser</key>
+		<false/>
+
+		<!-- auth：控制台登录/会话策略（atfield/auth.py 读取 server.auth.*）
+		     enabled=true           强制登录，未登录只能看到登录页
+		     session_ttl=28800       会话 8 小时后过期（受管设备建议不超过一个工作日）
+		     max_fail=5             连续失败 5 次锁定
+		     lock_seconds=300       锁定 5 分钟
+		     allow_anon_read=false  禁止匿名读取任何态势数据 -->
+		<key>auth</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>session_ttl</key>
+			<integer>28800</integer>
+			<key>max_fail</key>
+			<integer>5</integer>
+			<key>lock_seconds</key>
+			<integer>300</integer>
+			<key>allow_anon_read</key>
+			<false/>
+		</dict>
+	</dict>
+
+	<!-- ==================== 采集器 ==================== -->
+	<!--
+	  collectors.*：8 个采集器全部开启（MDM 基线要求"全开"，企业机器才有完整覆盖面）。
+	    process    进程与命令行              interval 3s
+	    network    网络连接与监听端口        interval 5s
+	    session    登录会话 / TTY            interval 20s
+	    persistence  LaunchAgents/Daemons/cron  interval 30s
+	    logstream 统一日志订阅（stream 模式，interval=0 表示由 max_per_second 限速）
+	    baseline   行为基线学习（需累计样本）  interval 120s
+	    integrity  关键文件完整性（watch_paths） interval 45s
+	    privileged 特权进程/提权事件（stream，root 下能力最全）
+	  interval 单位为秒；调小提高实时性、增加 CPU；建议按终端性能档位微调。
+	-->
+	<key>collectors</key>
+	<dict>
+		<key>process</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>3.0</real>
+		</dict>
+		<key>network</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>5.0</real>
+		</dict>
+		<key>session</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>20.0</real>
+		</dict>
+		<key>persistence</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>30.0</real>
+		</dict>
+		<key>logstream</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<integer>0</integer>
+		</dict>
+		<key>baseline</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>120.0</real>
+		</dict>
+		<key>integrity</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<real>45.0</real>
+		</dict>
+		<key>privileged</key>
+		<dict>
+			<key>enabled</key>
+			<true/>
+			<key>interval</key>
+			<integer>0</integer>
+		</dict>
+	</dict>
+
+	<!-- ==================== 统一日志订阅 ==================== -->
+	<!--
+	  predicate：os_log 谓词，只订阅有安全语义的子系统/进程，避免被系统噪声淹没。
+	  基线保留默认集合（sudo/sshd/authd/securityd/tccd/TCC/XProtect/coreduetd）。
+	  max_per_second=40：单机日志洪峰保护，超出部分由引擎限流丢弃并计数。
+	-->
+	<key>logstream</key>
+	<dict>
+		<key>predicate</key>
+		<string>process == "sudo" OR process == "sshd" OR process == "authd" OR process == "securityd" OR process == "tccd" OR subsystem == "com.apple.TCC" OR process == "XProtect" OR process == "XProtectRemediator" OR process == "coreduetd"</string>
+		<key>max_per_second</key>
+		<integer>40</integer>
+	</dict>
+
+	<!-- ==================== 存储 ==================== -->
+	<!--
+	  内存环形缓冲上限 + 落盘策略（~/.atfield/*.jsonl）。
+	  max_events=20000     事件环形缓冲条数
+	  max_findings=4000    告警留存条数
+	  max_incidents=400    攻击链留存条数
+	  persist=true         落盘，重启后保留现场（合规取证需要）
+	  persist_max_mb=64    单文件上限，超出滚动
+	  —— 受管设备建议都保留，磁盘压力大的话优先降 persist_max_mb。
+	-->
+	<key>store</key>
+	<dict>
+		<key>max_events</key>
+		<integer>20000</integer>
+		<key>max_findings</key>
+		<integer>4000</integer>
+		<key>max_incidents</key>
+		<integer>400</integer>
+		<key>persist</key>
+		<true/>
+		<key>persist_max_mb</key>
+		<integer>64</integer>
+	</dict>
+
+	<!-- ==================== 检测与关联 ==================== -->
+	<!--
+	  detect.enabled=true       启用检测引擎
+	  correlate_window=1200     攻击链关联窗口 20 分钟（跨阶段聚合成 incident）
+	  min_chain_stages=2        至少 2 个阶段才判定为攻击链，避免单点误报
+	-->
+	<key>detect</key>
+	<dict>
+		<key>enabled</key>
+		<true/>
+		<key>correlate_window</key>
+		<integer>1200</integer>
+		<key>min_chain_stages</key>
+		<integer>2</integer>
+	</dict>
+
+	<!-- ==================== 响应动作 ==================== -->
+	<!--
+	  allow_kill=true          允许终止同用户进程（跨用户/系统进程始终拒绝）
+	  allow_isolate=false      网络隔离需要 root+pf，默认只生成命令、不自动执行
+	  require_confirm=true     任何处置动作都要二次确认 —— 自动隔离在生产上会误伤
+	  基线立场：检测全开、阻断保守。要升级为自动响应请逐台评估后再改 allow_isolate。
+	-->
+	<key>response</key>
+	<dict>
+		<key>allow_kill</key>
+		<true/>
+		<key>allow_isolate</key>
+		<false/>
+		<key>require_confirm</key>
+		<true/>
+	</dict>
+
+	<!-- ==================== 审计链 ==================== -->
+	<!--
+	  audit.enabled=true       开启带锚点的防篡改审计链（~/.atfield/audit/audit.log）
+	  max_mb=8                 单文件 8MB 封存为 audit-<UTC>.log
+	  retain_days=180          保留 180 天（满足多数等保/SOC2 取证窗口）
+	  retain_total_mb=256      审计目录总量上限
+	  anchor_every=200         每 200 条生成一次锚点（哈希链 + anchor.json）
+	  —— 审计关闭会让"谁改了什么"失去可举证性，受管设备务必保持 true。
+	-->
+	<key>audit</key>
+	<dict>
+		<key>enabled</key>
+		<true/>
+		<key>max_mb</key>
+		<integer>8</integer>
+		<key>retain_days</key>
+		<integer>180</integer>
+		<key>retain_total_mb</key>
+		<integer>256</integer>
+		<key>anchor_every</key>
+		<integer>200</integer>
+	</dict>
+
+	<!-- ==================== 监控路径与可疑目录 ==================== -->
+	<!--
+	  watch_paths 故意不在此处覆盖（原因）：数组键是整体替换，一旦覆盖就会丢掉默认值里
+	  ~/.ssh/authorized_keys、~/.ssh/config、~/.zshrc、~/.bash_profile 等按用户展开的条目。
+	  如确需覆盖，请把系统级 + 每用户路径都写全，或直接用默认值。
+
+	  suspicious_dir_prefixes：出现"从这些目录启动/落地可执行文件"即视为可疑，
+	  用于进程链与持久化检测打分。企业环境如自建工具目录，可在此追加。
+	-->
+	<key>suspicious_dir_prefixes</key>
+	<array>
+		<string>/tmp/</string>
+		<string>/private/tmp/</string>
+		<string>/var/tmp/</string>
+		<string>/Users/Shared/</string>
+		<string>/private/var/folders/</string>
+		<string>/dev/shm/</string>
+	</array>
+
+	<!-- ==================== 情报 IOC ==================== -->
+	<!--
+	  ioc.domains / ioc.ips：本地情报种子，命中直接提升风险分。
+	  基线留空（不预置任何第三方情报，避免厂商锁定）；由 MDM 或本地 intel 模块填充。
+	-->
+	<key>ioc</key>
+	<dict>
+		<key>domains</key>
+		<array/>
+		<key>ips</key>
+		<array/>
+	</dict>
+</dict>
+</plist>

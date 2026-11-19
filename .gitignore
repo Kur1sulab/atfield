@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 打包产物（.app bundle 内嵌 python runtime，41MB，走 Release 分发不入库）
+packaging/dist/
+
+# 编辑残留
+*.bak
+*.bak-*
+.tmp_patch_*.py
+
+# macOS
+.DS_Store
+
+# 运行时状态
+*.log
+atfield.db

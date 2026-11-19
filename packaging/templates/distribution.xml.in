@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 packaging/build_pkg.sh 从 templates/distribution.xml.in 渲染。
+     - enable_localSystem="true"  安装到 /、写入 /usr/local/bin
+     - enable_currentUserHome="true" 允许 currentUserDomain（按用户安装路径）
+     - allowed-os-versions min=13.0 与 Info.plist 的 LSMinimumSystemVersion 对齐 -->
+<installer-gui-script minSpecVersion="2">
+    <title>@APP_NAME@ @VERSION@</title>
+    <organization>com.kurisulab</organization>
+    <domains enable_localSystem="true" enable_currentUserHome="true" enable_anywhere="false"/>
+    <options customize="never" require-scripts="true" hostArchitectures="arm64,x86_64"
+             rootVolumeOnly="true"/>
+    <allowed-os-versions>
+        <os-version min="@MIN_MACOS@"/>
+    </allowed-os-versions>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="@MIN_MACOS@"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default">
+            <line choice="@BUNDLE_ID@"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="@BUNDLE_ID@" visible="false">
+        <pkg-ref id="@BUNDLE_ID@"/>
+    </choice>
+    <pkg-ref id="@BUNDLE_ID@" version="@VERSION@" onConclusion="none">@COMPONENT_PKG@</pkg-ref>
+</installer-gui-script>
