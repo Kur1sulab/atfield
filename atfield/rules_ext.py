@@ -199,7 +199,8 @@ def _build_rule(rd: Dict[str, Any], pack: str) -> Optional[Rule]:
     advice = str(rd.get("advice") or "")
     tags = tuple(str(t) for t in (rd.get("tags") or []))
     mitre = tuple(str(t) for t in (rd.get("mitre") or []))
-    cooldown = float(rd.get("cooldown") or 30)
+    # 未显式指定 → None，由 Engine 按 tags 分级（周期行为类 10–15min，一次性保持短冷却）
+    cooldown = float(rd["cooldown"]) if rd.get("cooldown") is not None else None
     enabled = bool(rd.get("enabled", True))
     desc = str(rd.get("description") or f"外部规则包 {pack}")
 

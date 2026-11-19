@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import __product__, __version__, barrier as barrier_mod, compliance, monthly, report as report_mod
+from . import __product__, __version__, barrier as barrier_mod, compliance, depth as depth_mod, docker_inv as docker_inv_mod, monthly, report as report_mod
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
@@ -174,7 +174,7 @@ def _make_handler(core):
                         "python": _pf.python_version(),
                         "executable": _sys.executable,
                         "platform": _pf.platform(),
-                        "themes": ["dark", "dusk", "light"],
+                        "themes": ["dark", "light"],
                         "ts": time.time(),
                     })
                 if path == "/api/auth/me":
@@ -283,6 +283,27 @@ def _make_handler(core):
                         return self._json({"ok": True, **res})
                     except Exception as exc:
                         return self._err(f"{type(exc).__name__}: {exc}", 500)
+                if path == "/api/depth":
+                    # 纵深剖面：把已有 findings/incidents 只读投影到 L0→L3 深度轴。
+                    # 不新增检测、不改业务逻辑，只读 store 快照（同 /api/barrier 模式）。
+                    if not self._guard("read"):
+                        return
+                    try:
+                        res = depth_mod.build(core, hours=self._q(q, "hours", "6"))
+                        return self._json(res)
+                    except Exception as exc:
+                        return self._err(f"{type(exc).__name__}: {exc}", 500)
+                if path == "/api/docker":
+                    # 容器态势（云原生调研 Layer 1）：纯标准库只读直连 docker.sock，
+                    # 不依赖 docker CLI。与 /api/firewall 同口径：读不到时
+                    # available=false＋原因，绝不伪装成「没有容器」。
+                    # collect 内部已全量降级，这里再兜一层。
+                    if not self._guard("read"):
+                        return
+                    try:
+                        return self._json(docker_inv_mod.collect())
+                    except Exception as exc:
+                        return self._err(f"{type(exc).__name__}: {exc}", 500)
                 if path == "/api/findings":
                     return self._json({"findings": core.store.snapshot_findings(
                         limit=int(self._q(q, "limit", "200")))})
@@ -345,9 +366,13 @@ def _make_handler(core):
                     return self._json({"timeline": core.store.timeline(
                         int(self._q(q, "limit", "300")))})
                 if path == "/api/suppress":
+                    _due = core.engine.suppress_review_due()
                     return self._json({"items": core.engine.suppress,
                                        "count": len(core.engine.suppress),
                                        "suppressed_total": core.engine.suppressed,
+                                       "suppress_hits": core.engine.suppress_hits,
+                                       "review_due": [{"index": d["index"], "reason": d["reason"]}
+                                                      for d in _due],
                                        "path": core.engine._suppress_path})
                 if path == "/api/monthly/file":
                     try:
@@ -581,9 +606,14 @@ def _make_handler(core):
                                 detail={"status": body.get("status"), "owner": body.get("owner")})
                     return self._json(_res)
                 if path == "/api/suppress/add":
+                    _flds = body.get("fields")
                     _res = core.engine.add_suppress(
                         str(body.get("rule_id") or ""), str(body.get("contains") or ""),
-                        str(body.get("note") or ""))
+                        str(body.get("note") or ""),
+                        fields=_flds if isinstance(_flds, dict) else None,
+                        actor=str(body.get("actor") or ""),
+                        expires_in=(float(body.get("expires_in")) if body.get("expires_in") else None),
+                        review_days=(float(body.get("review_days")) if body.get("review_days") else None))
                     self._audit("suppress.add", str(body.get("rule_id") or ""), _res, sess,
                                 detail={"contains": body.get("contains")})
                     return self._json(_res)

@@ -18,6 +18,7 @@ from . import rules_ext
 from . import updates as updates_mod
 from .canary import Canary
 from .detect import Correlator, Engine
+from .detect.engine import cooldown_for_tags
 from .detect import rules_builtin
 from .intel import Intel
 from .inventory import Inventory
@@ -38,6 +39,10 @@ FUSION_MAP = {
                    ["command_control", "threat_intel"], ["T1071"]),
     "ndr.risky_domain": ("NDR-RISKY-DOMAIN", "外联动态 DNS / 隧道类域名", "medium",
                          ["command_control"], ["T1568", "T1071"]),
+    "ndr.dga": ("NDR-DGA", "外联疑似 DGA 随机域名（形态启发式，不依赖 IOC 名单）", "medium",
+                ["command_control"], ["T1568", "T1071"]),
+    "ndr.dns_tunnel": ("NDR-DNS-TUNNEL", "外联疑似 DNS 隧道 / 编码载荷域名", "medium",
+                       ["command_control"], ["T1071", "T1048"]),
     "ndr.risky_port": ("NDR-RISKY-PORT", "外联命中高风险端口", "high",
                        ["command_control"], ["T1571"]),
     "ndr.direct_ip": ("NDR-DIRECT-IP", "非浏览器进程直连未解析域名公网 IP", "medium",
@@ -48,6 +53,8 @@ FUSION_MAP = {
                          ["ueba", "execution"], ["T1204"]),
     "ueba.new_destination": ("UEBA-NEW-DEST", "首次出现的外联目的地", "low",
                              ["ueba", "command_control"], ["T1071"]),
+    "ueba.rare_activity": ("UEBA-RARE-ACT", "时段/组合频率异常（低频行为活跃）", "medium",
+                           ["ueba", "execution"], ["T1204"]),
 }
 
 
@@ -61,6 +68,10 @@ def _fusion_advice(rule_id: str) -> str:
                      "确认是否为供应链/第三方服务的正常出口。",
         "NDR-RISKY-DOMAIN": "动态 DNS / 隧道服务常被用于规避封禁。确认该域名的注册时间与"
                             "业务归属，必要时在出口 DNS 上做阻断观察。",
+        "NDR-DGA": "域名形态像算法生成（辅音连缀 / 零元音 / 高熵），IOC 名单追不上当天新注册的"
+                   "C2 域名，这一层专补这个缺口。核对该域名注册时间与进程归属，导出该进程外联时间线。",
+        "NDR-DNS-TUNNEL": "子域承载编码载荷（超长段 / base32/base64 字符集 / 高熵），疑似 DNS 隧道外带。"
+                          "确认该进程是否有合法 DNS 隧道用途（如 iodine 运维通道），否则按数据外泄处置。",
         "NDR-RISKY-PORT": "非常规端口外联可能绕过基于端口的出口策略。检查该端口的业务合理性，"
                           "并对该进程做完整行为回放。",
         "NDR-DIRECT-IP": "直连 IP 绕过了域名信誉体系。确认为什么这个进程不做域名解析，"
@@ -70,6 +81,8 @@ def _fusion_advice(rule_id: str) -> str:
         "UEBA-NEW-PROC": "首次出现的进程不一定是恶意的，但值得确认来源：谁启动的、从哪来、"
                          "之后做了什么。",
         "UEBA-NEW-DEST": "首次外联目的地，观察其是否重复、是否伴随数据外发。",
+        "UEBA-RARE-ACT": "该行为在本机历史里几乎不在此组合下出现（时段罕见/组合罕见）。"
+                         "先确认是否为定时任务、备份或新装的合法工具，再判断是否被人为拉起。",
     }.get(rule_id, "人工复核该告警的上下文。")
 
 
@@ -278,6 +291,11 @@ class Core:
         fdicts = [f.to_dict() for f in findings]
         if fdicts:
             self.store.add_findings(findings)
+        # 被并入既有告警的重复命中：只把计数/末条样本写回那一条，不新增行
+        try:
+            self.store.bump_findings(self.engine.take_merges())
+        except Exception:
+            pass
         incidents = self.correlator.ingest(fdicts) if fdicts else []
         inc_dicts = [i.to_dict() for i in incidents]
         for inc in incidents:
@@ -309,12 +327,16 @@ class Core:
             reason = (ev.subject or {}).get("reason") or (ev.subject or {}).get("reasons") or ""
             if isinstance(reason, list):
                 reason = "；".join(str(r) for r in reason)
-            out.append(Finding(
+            f = Finding(
                 rule_id=rid, name=name, severity=sev, event=ev, actor=actor,
                 tags=list(tags), mitre=list(mitre),
                 detail=str(reason or name),
                 advice=_fusion_advice(rid),
-            ))
+            )
+            # 融合层同样走稳定键去重：同 (规则,主体,进程,路径) 只出一条，其余计数
+            if not self.engine.admit(f, ev, cooldown_for_tags(tags)):
+                continue
+            out.append(f)
         return out
 
     # ---------- 聚合视图 ----------
@@ -466,9 +488,11 @@ class Core:
                   subject={"reason": "诱饵文件被读取（atime 前进）", "note": "伪装成凭据清单"}),
         ]
         # ---- 融合层：信标（规律心跳）—— 用 TEST-NET-2 保留网段，绝不与真实目标混淆 ----
-        for i in range(6):
+        # 新判据要求 ≥8 样本、跨度 ≥300s 且度过 12 次连接的冷启动基线，
+        # 故演示序列为 16×60s（跨度 900s），保证自检仍能命中 NDR-BEACON。
+        for i in range(16):
             demo.append(Event(
-                kind="net.connect", source="selftest", ts=now - 300 + i * 60, host=host,
+                kind="net.connect", source="selftest", ts=now - 900 + i * 60, host=host,
                 pid=900003, process="python3", user=self.user,
                 path="198.51.100.77:8443", severity="medium",
                 subject={"raddr": "198.51.100.77:8443", "rport": 8443,

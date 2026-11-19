@@ -104,6 +104,13 @@ class Finding:
     advice: str = ""
     ts: float = field(default_factory=now)
     fid: str = ""
+    # ---- 降噪聚合（新增字段，不改既有对外字段名）----
+    count: int = 1                       # 同一稳定身份被并入的次数
+    dedup_key: str = ""                  # rule.id|actor|process|path
+    first_detail: str = ""               # 首条样本
+    last_detail: str = ""                # 末条样本（detail 抖动只更新这里）
+    first_ts: float = 0.0
+    last_ts: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.fid:
@@ -126,6 +133,12 @@ class Finding:
             "ts": self.ts,
             "time": iso(self.ts),
             "event": self.event.to_dict(),
+            "count": self.count,
+            "dedup_key": self.dedup_key,
+            "first_detail": self.first_detail or self.detail,
+            "last_detail": self.last_detail or self.detail,
+            "first_ts": self.first_ts or self.ts,
+            "last_ts": self.last_ts or self.ts,
         }
 
 
@@ -187,4 +200,10 @@ def finding_from_raw(d: Dict[str, Any]) -> Finding:
         advice=d.get("advice", ""),
         ts=d.get("ts", ev.ts),
         fid=d.get("fid", ""),
+        count=int(d.get("count") or 1),
+        dedup_key=d.get("dedup_key", ""),
+        first_detail=d.get("first_detail", ""),
+        last_detail=d.get("last_detail", ""),
+        first_ts=float(d.get("first_ts") or 0.0),
+        last_ts=float(d.get("last_ts") or 0.0),
     )

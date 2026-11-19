@@ -86,6 +86,42 @@ class Store:
                 rows.append(d)
             self._append_jsonl(self._findings_path, rows)
 
+    def bump_findings(self, rows: List[dict]) -> int:
+        """把「并入已有告警」的增量写回内存里的那条告警（不新增行）。
+
+        rows: [{fid, count, last_detail, last_ts, dedup_key}, ...]
+        返回实际更新条数。落盘不在每条上做——dedup.json 保存了同一份计数，
+        重启时由 Engine._load_dedup 回填（见 reapply_dedup）。
+        """
+        if not rows:
+            return 0
+        with self._lock:
+            idx = {d.get("fid"): d for d in self.findings if d.get("fid")}
+            n = 0
+            for r in rows:
+                d = idx.get(r.get("fid") or "")
+                if not isinstance(d, dict):
+                    continue
+                d["count"] = int(r.get("count") or d.get("count") or 1)
+                if r.get("last_detail"):
+                    d["last_detail"] = r["last_detail"]
+                if r.get("last_ts"):
+                    d["last_ts"] = r["last_ts"]
+                if r.get("dedup_key"):
+                    d["dedup_key"] = r["dedup_key"]
+                n += 1
+            return n
+
+    def reapply_dedup(self, dedup: Dict[str, Any]) -> int:
+        """重启后把 dedup.json 里的计数回填到刚载入的告警行。"""
+        if not dedup:
+            return 0
+        rows = [{"fid": v.get("fid"), "count": v.get("count"),
+                 "last_detail": v.get("last_detail"),
+                 "last_ts": v.get("last_ts"), "dedup_key": k}
+                for k, v in dedup.items() if isinstance(v, dict)]
+        return self.bump_findings(rows)
+
     def add_incident(self, inc: Any) -> None:
         with self._lock:
             d = inc.to_dict() if hasattr(inc, "to_dict") else dict(inc)
