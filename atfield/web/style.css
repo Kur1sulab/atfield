@@ -1105,3 +1105,51 @@ pre.gov-md { max-height: 380px; }
 .dsum-row .why { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dnote { padding: 0 16px 13px; font-size: 11.5px; line-height: 1.7; color: var(--muted); }
 @media (max-width: 1100px) { .dsum { grid-template-columns: 1fr; } }
+
+/* ========================== 降噪聚合徽标 + 首末样本 ==========================
+   数据来自后端 Finding.to_dict() 的既有字段：count / first_detail / last_detail /
+   first_ts / last_ts。语义全部由符号与文字承担——「≡ 聚合 N 条」「首末样本」
+   「首条 / 末条」，颜色只做 1px 描边与文字层级，与 .dflag 同一套纪律：
+   不引新色相，深色毛玻璃与零彩度皮肤下都成立。 */
+.agg {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 6px;
+  border-radius: var(--r-xs); font: 400 11px/1.7 var(--mono); color: var(--muted);
+  font-variant-numeric: tabular-nums; background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-hi); white-space: nowrap; vertical-align: 1px;
+}
+.smp-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 6px; cursor: pointer;
+  border: 0; border-radius: var(--r-xs); font-size: 11px; line-height: 1.7; font-family: inherit;
+  color: var(--muted); background: var(--hover); box-shadow: inset 0 0 0 1px var(--line);
+  white-space: nowrap;
+}
+.smp-btn::before { content: "▸"; font-size: 9px; color: var(--faint); }
+.smp-btn[aria-expanded="true"] { color: var(--text); box-shadow: inset 0 0 0 1px var(--line-hi); }
+.smp-btn[aria-expanded="true"]::before { content: "▾"; }
+.smp-btn:hover { color: var(--text); }
+.smp-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.smp-when { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); }
+.smp-btn[aria-expanded="true"] .smp-when { color: var(--muted); }
+.smp-na { color: var(--faint); font-size: 11px; }
+/* 标签列：一词一 chip，换行只发生在词间（CJK 逐字竖排像故障） */
+#f-table td .tagchip { display: inline-block; margin: 1px 3px 1px 0; padding: 0 5px;
+  border-radius: var(--r-xs); font: 400 10.5px/1.6 var(--mono); color: var(--muted);
+  background: var(--hover); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; }
+#f-table th:last-child, #f-table td:last-child { min-width: 74px; }
+/* 多出一列「首末样本」后，详情列收窄到 250px，整表不上横向滚动条 */
+#f-table .clip { max-width: 250px; }
+/* 展开行：铺满整行，长命令整行读得完 */
+.sub-row > td { padding: 0 12px 10px; background: var(--bg-2); }
+.sub-row[hidden] { display: none; }
+.smp-body { padding: 10px 12px; border-radius: var(--r-xs); box-shadow: inset 0 0 0 1px var(--line); }
+.smp-meta { font: 400 11px/1.6 var(--mono); color: var(--faint); margin-bottom: 8px; overflow-wrap: anywhere; }
+.smp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; }
+.smp-col { min-width: 0; padding-left: 9px; box-shadow: inset 2px 0 0 var(--line-hi); }
+.smp-hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+.smp-tag { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
+.smp-ts { font: 400 11px/1.6 var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.smp-txt { font: 400 11.5px/1.7 var(--mono); color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+.smp-same { font-style: normal; font-size: 10.5px; color: var(--faint); }
+@media (max-width: 900px) {
+  .smp-grid { grid-template-columns: 1fr; }
+}

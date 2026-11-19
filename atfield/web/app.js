@@ -72,6 +72,58 @@ function sev(v) {
   const k = String(v || 'info');
   return `<span class="sev sev-${esc(k)}">${esc(CN.sev[k] || k)}</span>`;
 }
+
+/* ---------------- 降噪聚合：只读后端既有字段，不在这里造新名字 ----------------
+   字段来源 atfield/model.py Finding.to_dict()：
+     count（同一稳定身份被并入的次数）/ dedup_key
+     first_detail、last_detail（首末样本）/ first_ts、last_ts
+   纪律：聚合这件事只用「符号 + 文字」讲清楚（≡ 聚合 N 条、首末样本），
+        颜色不承担区分；深色毛玻璃与零彩度皮肤下都要读得出来。 */
+function aggN(f) {                      // 只有 >1 才是真聚合，count 缺失/脏数据一律按单条
+  const n = Number((f || {}).count);
+  return Number.isFinite(n) && n > 1 ? Math.floor(n) : 1;
+}
+function clk(ts) {
+  const d = new Date(Number(ts || 0) * 1000);
+  const p = x => String(x).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function aggSpan(f) {                   // 首末跨度：同一天只给时分秒，跨天带上日期
+  const ft = Number((f || {}).first_ts || (f || {}).ts || 0);
+  const lt = Number((f || {}).last_ts || ft || 0);
+  if (!ft) return '';
+  const sameDay = new Date(ft * 1000).toDateString() === new Date(lt * 1000).toDateString();
+  return sameDay ? `${clk(ft)} → ${clk(lt)}` : `${tsStr(ft)} → ${tsStr(lt)}`;
+}
+function aggBadge(f) {
+  const n = aggN(f);
+  if (n <= 1) return '';
+  const span = aggSpan(f);
+  return `<span class="agg" title="降噪去重：去重键 ${esc(f.dedup_key || '—')} 把这 ${n} 条同类事件并成 1 条${span ? '（' + esc(span) + '）' : ''}">≡ 聚合 ${num(n)} 条</span>`;
+}
+function sampleCell(f, i) {
+  if (aggN(f) <= 1) return `<span class="smp-na" title="count=1：这一条没有并入其它事件">单条</span>`;
+  return `<button type="button" class="smp-btn" data-smp="${i}" aria-expanded="false" aria-controls="smp-${i}"
+    title="展开这条聚合告警的首条与末条原始事件">首末样本<span class="smp-when">${esc(aggSpan(f))}</span></button>`;
+}
+function samplePanel(f, i) {
+  const first = String(f.first_detail || f.detail || '');
+  const last = String(f.last_detail || f.detail || '');
+  const ft = Number(f.first_ts || f.ts || 0);
+  const lt = Number(f.last_ts || ft || 0);
+  const same = first === last;
+  const col = (tag, ts, txt, note) => `<div class="smp-col">
+        <div class="smp-hd"><span class="smp-tag">${tag}</span><span class="smp-ts">${esc(tsStr(ts))}</span>${note || ''}</div>
+        <div class="smp-txt">${esc(txt) || '（空）'}</div>
+      </div>`;
+  return `<div class="smp-body" id="smp-${i}">
+      <div class="smp-meta">去重键 <span class="mono">${esc(f.dedup_key || '—')}</span> · 共 ${num(aggN(f))} 条 · 跨度 ${esc(aggSpan(f))}</div>
+      <div class="smp-grid">
+        ${col('首条', ft, first)}
+        ${col('末条', lt, last, same ? '<i class="smp-same">与首条同文</i>' : '')}
+      </div>
+    </div>`;
+}
 function stBadge(v) {
   const k = String(v || 'unknown');
   return `<span class="st st-${k === 'gap' ? 'unknown' : esc(k)}">${esc(CN.st[k] || k)}</span>`;
@@ -116,7 +168,12 @@ async function API(path, opt) {
 function table(cols, rows, opts = {}) {
   if (!rows || !rows.length) return `<div class="empty">${esc(opts.empty || '暂无数据')}</div>`;
   const head = cols.map(c => `<th>${esc(c.t)}</th>`).join('');
-  const body = rows.map(r => `<tr>${cols.map((c, i) => `<td class="${c.c || ''}">${r[i] == null ? '' : r[i]}</td>`).join('')}</tr>`).join('');
+  const subs = opts.subs || [];
+  const body = rows.map((r, ri) => {
+    const main = `<tr>${cols.map((c, i) => `<td class="${c.c || ''}">${r[i] == null ? '' : r[i]}</td>`).join('')}</tr>`;
+    /* 展开行：铺满整行，长样本不被窄列切成碎片（opts.subs[i] 与 rows[i] 对齐） */
+    return subs[ri] ? main + `<tr class="sub-row" hidden><td colspan="${cols.length}">${subs[ri]}</td></tr>` : main;
+  }).join('');
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function panel(title, body, opts = {}) {
@@ -326,7 +383,7 @@ function miniFindings(list) {
     <div class="mini-item">
       ${sev(f.severity)}
       <div class="mi-main">
-        <div class="mi-name">${esc(f.name || f.rule_id || '')}</div>
+        <div class="mi-name">${esc(f.name || f.rule_id || '')}${aggBadge(f)}</div>
         <div class="mi-sub" title="${esc(f.rule_id || '')} · ${esc((f.actor || '').toString())} · ${esc(f.detail || '')}">${esc(f.rule_id || '')} · ${esc((f.actor || '').toString())} · ${esc(f.detail || '')}</div>
       </div>
     </div>`).join('')}</div>`;
@@ -336,15 +393,24 @@ function miniFindings(list) {
 async function viewFindings() {
   const [fd, inc] = await Promise.all([API('/api/findings?limit=300'), API('/api/incidents?limit=50')]);
   const list = fd.findings || [];
-  const rows = list.map(f => [
-    `<span class="mono">${esc(tsStr((f.event || {}).ts || f.ts))}</span>`,
-    sev(f.severity),
-    `<span class="mono">${esc(f.rule_id || '')}</span>`,
-    esc(f.name || ''),
-    clip(f.actor, 22),
-    clip(f.detail || '', 90),
-    `<span class="mono">${esc(tagsCn(f.tags, ','))}</span>`,
-  ]);
+  const subs = [];
+  const rows = list.map((f, i) => {
+    if (aggN(f) > 1) subs[i] = samplePanel(f, i);
+    return [
+      `<span class="mono">${esc(tsStr((f.event || {}).ts || f.ts))}</span>`,
+      sev(f.severity),
+      `<span class="mono">${esc(f.rule_id || '')}</span>`,
+      `${esc(f.name || '')}${aggBadge(f)}`,
+      clip(f.actor, 22),
+      clip(f.detail || '', 64),
+      sampleCell(f, i),
+      (f.tags || []).length
+        ? (f.tags || []).map(t => `<span class="tagchip">${esc(CN.tag[t] || t)}</span>`).join('')
+        : '<span class="smp-na">—</span>',
+    ];
+  });
+  /* 降噪效果要看得见：多少条是聚合出来的，直接写在计数里 */
+  const nAgg = list.filter(f => aggN(f) > 1).length;
   return `
   <div class="filters">
     <input type="text" id="f-q" placeholder="过滤规则 / 主体 / 详情">
@@ -354,13 +420,13 @@ async function viewFindings() {
       <option value="medium">中危</option><option value="low">低危</option>
     </select>
     <span class="spacer"></span>
-    <span class="count-hint">${num(list.length)} 条告警</span>
+    <span class="count-hint">${num(list.length)} 条告警${nAgg ? ` · 其中 ${num(nAgg)} 条为聚合（可展开首末样本）` : ''}</span>
   </div>
   ${panel('攻击链', chainList(inc.incidents || []), { tag: '时序关联', tagCls: 'mint' })}
   ${panel('告警明细', `<div id="f-table">${table([
-    { t: '时间', c: 'nowrap mono' }, { t: '等级' }, { t: '规则' }, { t: '名称' },
-    { t: '主体' }, { t: '详情' }, { t: '标签', c: 'mono' },
-  ], rows)}</div>`)}`;
+    { t: '时间', c: 'nowrap mono' }, { t: '等级' }, { t: '规则', c: 'nowrap' }, { t: '名称' },
+    { t: '主体' }, { t: '详情' }, { t: '首末样本', c: 'nowrap' }, { t: '标签', c: 'mono' },
+  ], rows, { subs })}</div>`, { tag: nAgg ? `聚合 ${num(nAgg)} 条` : '未触发聚合' })}`;
 }
 function bindFindings() {
   const q = $('#f-q'), s = $('#f-sev');
@@ -368,12 +434,25 @@ function bindFindings() {
   const apply = () => {
     const txt = q.value.trim().toLowerCase(), sv = s.value;
     $$('#f-table tbody tr').forEach(tr => {
+      if (tr.classList.contains('sub-row')) { tr.hidden = true; return; }   // 过滤时收起展开行
       const hit = (!txt || tr.textContent.toLowerCase().includes(txt)) && (!sv || tr.children[1].textContent.trim() === CN.sev[sv]);
       tr.style.display = hit ? '' : 'none';
+      const sub = tr.nextElementSibling;
+      if (sub && sub.classList.contains('sub-row')) sub.hidden = true;
     });
+    $$('#f-table [data-smp]').forEach(b => b.setAttribute('aria-expanded', 'false'));
   };
   q.addEventListener('input', apply);
   s.addEventListener('change', apply);
+  /* 首末样本：点开在下一行铺满整行，长命令不用挤在窄列里 */
+  $$('#f-table [data-smp]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tr = btn.closest('tr'), sub = tr && tr.nextElementSibling;
+      if (!sub || !sub.classList.contains('sub-row')) return;
+      sub.hidden = !sub.hidden;
+      btn.setAttribute('aria-expanded', String(!sub.hidden));
+    });
+  });
 }
 
 /* ---------------- 视图：取证时间线 ---------------- */
