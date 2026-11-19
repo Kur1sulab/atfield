@@ -353,5 +353,22 @@ def main(argv) -> int:
     return 0 if FAIL == 0 else 1
 
 
+def load_tests(loader, tests, pattern):
+    """unittest discover 入口：把四个套件变成正式测试。
+
+    此前本文件只有 __main__ 守卫，discover 导入后一个测试都不会跑——
+    55 项治理断言在文档声称的回归命令里从未被执行。
+    """
+    import unittest
+
+    class _Governance(unittest.TestCase):
+        def test_all_suites(self):
+            self.assertEqual(main(["test_governance.py"]), 0,
+                             "治理回归存在失败项（见上方输出）")
+
+    tests.addTests(loader.loadTestsFromTestCase(_Governance))
+    return tests
+
+
 if __name__ == "__main__":
     sys.exit(main(sys.argv))

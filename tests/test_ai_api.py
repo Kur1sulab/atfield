@@ -419,4 +419,23 @@ print()
 print("=" * 74)
 print(f"结果：{OK} 通过 / {FAIL} 失败")
 print("=" * 74)
-sys.exit(0 if FAIL == 0 else 1)
+
+
+def load_tests(loader, tests, pattern):
+    """unittest discover 入口：脚本体已在导入时跑完，这里把计数变成正式断言。
+
+    此前模块级 sys.exit() 被 unittest 记为导入错误（_FailedTest），
+    discover 永远 FAILED(errors=3)、退出码 1，回归门禁形同虚设。
+    """
+    import unittest
+
+    class _ScriptChecks(unittest.TestCase):
+        def test_all_checks_passed(self):
+            self.assertEqual(FAIL, 0, f"脚本内 {FAIL} 项检查失败（见上方输出）")
+
+    tests.addTests(loader.loadTestsFromTestCase(_ScriptChecks))
+    return tests
+
+
+if __name__ == "__main__":
+    sys.exit(0 if FAIL == 0 else 1)

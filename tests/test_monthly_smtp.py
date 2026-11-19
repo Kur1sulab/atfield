@@ -489,5 +489,21 @@ def main() -> int:
     return 1 if FAIL else 0
 
 
+def load_tests(loader, tests, pattern):
+    """unittest discover 入口：把 t01-t15 变成正式测试。
+
+    此前本文件只有 __main__ 守卫，discover 导入后一个测试都不会跑——
+    79 项月报/SMTP 断言在文档声称的回归命令里从未被执行。
+    """
+    import unittest
+
+    class _MonthlySmtp(unittest.TestCase):
+        def test_all(self):
+            self.assertEqual(main(), 0, "月报 SMTP 回归存在失败项（见上方输出）")
+
+    tests.addTests(loader.loadTestsFromTestCase(_MonthlySmtp))
+    return tests
+
+
 if __name__ == "__main__":
     sys.exit(main())
