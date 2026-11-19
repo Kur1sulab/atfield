@@ -38,6 +38,10 @@ const S = {
   assets: null,
   cache: {},
   lastRender: 0,
+  depthHours: 6,    // 纵深剖面时间窗（小时）
+  depthData: null,  // /api/depth 最近一次结果
+  depthSel: null,   // 当前展开档案的节点 id
+  depthChain: null, // 聚焦的攻击链 iid 数组（同名链分组；null = 全部信号）
 };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -199,6 +203,16 @@ function renderChrome(o) {
   $('#b-canary').textContent = num((f.canary || {}).trips || 0);
   $('#b-pending').textContent = num(((f.playbooks || {}).pending || []).length);
   $('#b-tickets').textContent = num(((f.tickets || []).filter(x => x.status !== 'closed') || []).length);
+  // 纵深徽标：访问过纵深剖面后，显示「当前最深到达层」
+  const bd = $('#b-depth');
+  if (bd) {
+    const dp = S.depthData && S.depthData.deepest;
+    bd.hidden = !dp;
+    if (dp) {
+      bd.textContent = dp.layer;
+      bd.style.color = SEV_VAR[dp.severity] || 'var(--text)';
+    }
+  }
 }
 
 /* ---------------- 视图：态势总览 ---------------- */
@@ -313,7 +327,7 @@ function miniFindings(list) {
       ${sev(f.severity)}
       <div class="mi-main">
         <div class="mi-name">${esc(f.name || f.rule_id || '')}</div>
-        <div class="mi-sub">${esc(f.rule_id || '')} · ${esc((f.actor || '').toString())} · ${esc(f.detail || '')}</div>
+        <div class="mi-sub" title="${esc(f.rule_id || '')} · ${esc((f.actor || '').toString())} · ${esc(f.detail || '')}">${esc(f.rule_id || '')} · ${esc((f.actor || '').toString())} · ${esc(f.detail || '')}</div>
       </div>
     </div>`).join('')}</div>`;
 }
@@ -494,10 +508,21 @@ async function viewUEBA() {
 /* ---------------- 视图：NDR ---------------- */
 async function viewNDR() {
   const d = await API('/api/ndr');
+  const dns = d.dns || {};
+  const DNS_KIND = { dga: 'DGA 随机域名', tunnel: 'DNS 隧道' };
   const bRows = (d.beacons || []).map(b => [
     esc(b.process || ''), `<span class="mono">${esc(b.ip)}:${esc(b.port)}</span>`,
     esc(b.hostname || '未解析'), `<span class="mono">${esc(b.interval_s)}s</span>`,
-    `<span class="mono">${esc(b.cv)}</span>`, num(b.samples), num(b.hits),
+    `<span class="mono">${esc(b.cv)}</span>`,
+    b.score === undefined ? '—' : `<span class="mono">${esc(b.score)}</span>`,
+    num(b.samples), num(b.hits),
+  ]);
+  const dnsRows = (dns.flagged || []).map(f => [
+    `<span class="mono">${clip(f.host, 52)}</span>`,
+    esc(DNS_KIND[f.kind] || f.kind || ''),
+    `<span class="sev sev-${f.score >= 0.6 ? 'critical' : 'medium'}">${esc(f.score)}</span>`,
+    clip((f.signals || []).join(' · '), 74),
+    clip(Object.keys(f.processes || {}).join(','), 34),
   ]);
   const fRows = (d.flags || []).map(f => [
     `<span class="mono">${esc(tsStr(f.ts))}</span>`, sev(f.severity),
@@ -516,9 +541,17 @@ async function viewNDR() {
     ${kpi('行为标记', num((d.flags || []).length), '近期 NDR 判定', 'var(--orange)')}
   </div>
   ${panel('信标检测（C2 心跳特征）', table([
-    { t: '进程' }, { t: '目的地' }, { t: '域名' }, { t: '平均间隔' }, { t: '波动系数' }, { t: '样本' }, { t: '命中轮次' },
-  ], bRows, { empty: '暂未发现规律心跳（需要至少 5 个等间隔连接样本）' }),
-    { tag: '间隔变异系数 < 0.18 触发' })}
+    { t: '进程' }, { t: '目的地' }, { t: '域名' }, { t: '平均间隔' }, { t: '波动系数' }, { t: '置信度' }, { t: '样本' }, { t: '命中轮次' },
+  ], bRows, { empty: '暂未发现规律心跳（需样本≥8、跨度≥300s、综合评分≥0.60）' }),
+    { tag: '综合评分 ≥ 0.60 触发：抖动 + 周期性 + 持续性加权，递增趋势（重连退避）降分' })}
+  ${panel('DNS 异常判定（DGA + 隧道）', table([
+    { t: '域名' }, { t: '类型' }, { t: '可疑度' }, { t: '命中特征' }, { t: '关联进程' },
+  ], dnsRows, {
+    empty: dns.warming_up
+      ? `冷启动观察中：已看 ${num(dns.observations || 0)} 个域名，攒够 ${num(dns.warmup_remaining || 0)} 个后开始告警（避免一上来满屏）`
+      : '暂无疑似 DGA / DNS 隧道域名',
+  }),
+    { tag: `已看 ${num(dns.domains || 0)} 个域名 · 疑似 ${num(dns.suspicious || 0)} · 观察 ${num(dns.watch || 0)}` })}
   ${panel('网络行为标记', table([
     { t: '时间', c: 'nowrap' }, { t: '等级' }, { t: '类型' }, { t: '进程' }, { t: '说明' },
   ], fRows, { empty: '暂无标记' }))}
@@ -1362,9 +1395,377 @@ async function viewWall() {
     </div>`, { tag: '读法' })}`;
 }
 
+/* ---------------- 视图：纵深剖面 ----------------
+   横轴时间 × 纵轴深度（L0 外部 → L3 核心）。数据来自 /api/depth（只读投影）。
+   视觉纪律：中性色阶承载结构；语义色只出现在圆点、2px 线、数字/文字着色；
+   已突破的层不整层染色，只有层侧一条 2px 线；无事件的层画「沉默区」虚线框。 */
+const SEV_VAR = { critical: 'var(--bad)', high: 'var(--warn)', medium: 'var(--amber)', low: 'var(--info)', info: 'var(--neutral)' };
+const LAYER_IDX = { L0: 0, L1: 1, L2: 2, L3: 3 };
+const DP = { x0: 148, x1: 984, w: 1000, bandH: 100, top: 16, axisY: 442, h: 470 };
+const clipText = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '…' : s; };
+const dpHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+const dpX = (ts, win) => DP.x0 + 8 + Math.max(0, Math.min(1, (ts - win.since_ts) / Math.max(1, win.until_ts - win.since_ts))) * (DP.x1 - DP.x0 - 16);
+const dpBandY = layer => DP.top + (LAYER_IDX[layer] || 0) * DP.bandH;
+
+function depthSvg(d) {
+  const win = d.window;
+  const nodes = d.nodes || [];
+  const byId = {}; nodes.forEach(n => byId[n.id] = n);
+  const focus = S.depthChain;   // null 或 iid 数组（同名链分组聚焦）
+  const dim = n => (focus && !focus.includes(n.iid)) ? ' opacity="0.15"' : '';
+  // 预计算节点坐标：散点带确定性抖动；同层拥挤时做碰撞避让，
+  // 让同秒发生的链节点也能看出「往下掉」的折线段，而不是叠成一个点。
+  const pos = {};
+  const bandsPos = { L0: [], L1: [], L2: [], L3: [] };
+  nodes.forEach(n => {
+    const x = dpX(n.ts, win);
+    const y = dpBandY(n.layer) + DP.bandH / 2 + (n.kind === 'finding' ? (dpHash(n.id) % 57) - 28 : 0);
+    bandsPos[n.layer].push({ id: n.id, x, y, base: y });
+  });
+  Object.keys(bandsPos).forEach(k => {
+    const arr = bandsPos[k].sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
+    const top = dpBandY(k) + 18, bot = dpBandY(k) + DP.bandH - 18;
+    const placed = [];
+    arr.forEach(p => {
+      const clash = q => Math.abs(p.x - q.x) < 16 && Math.abs(p.y - q.y) < 16;
+      if (placed.some(clash)) {
+        for (const off of [18, -18, 36, -36]) {
+          const ny = Math.max(top, Math.min(bot, p.base + off));
+          if (!placed.some(q => Math.abs(p.x - q.x) < 16 && Math.abs(ny - q.y) < 16)) { p.y = ny; break; }
+        }
+      }
+      placed.push(p);
+      pos[p.id] = p;
+    });
+  });
+  // 时间刻度（中性网格线）
+  let ticks = '';
+  for (let i = 0; i <= 6; i++) {
+    const ts = win.since_ts + (win.until_ts - win.since_ts) * i / 6;
+    const x = dpX(ts, win);
+    const dt = new Date(ts * 1000);
+    const lab = i === 6 ? '现在' : `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    ticks += `<line x1="${x}" y1="${DP.top}" x2="${x}" y2="${DP.top + 4 * DP.bandH}" stroke="var(--line)" stroke-width="1"${i === 6 ? ' stroke-dasharray="3 3"' : ''}/>` +
+      `<text x="${x}" y="${DP.axisY}" text-anchor="middle" class="dp-tick">${lab}</text>`;
+  }
+  // 层带：交替中性底；沉默区画虚线框 + 明确文字，绝不画成空白轨道
+  const cx = (DP.x0 + DP.x1) / 2;
+  const bands = d.layers.map((l, i) => {
+    const y = DP.top + i * DP.bandH;
+    const pl = d.per_layer[l.key] || {};
+    let s = `<rect x="${DP.x0}" y="${y}" width="${DP.x1 - DP.x0}" height="${DP.bandH}" fill="${i % 2 ? 'var(--hover)' : 'transparent'}"/>` +
+      `<line x1="${DP.x0}" y1="${y + DP.bandH}" x2="${DP.x1}" y2="${y + DP.bandH}" stroke="var(--line)" stroke-width="1"/>` +
+      `<text x="16" y="${y + 42}" class="dp-layer-name">${l.name}</text>`;
+    if (pl.silent) {
+      const cy = y + DP.bandH / 2;
+      s += `<rect x="${DP.x0 + 10}" y="${y + 16}" width="${DP.x1 - DP.x0 - 20}" height="${DP.bandH - 32}" rx="10" fill="none" stroke="var(--line-hi)" stroke-width="1" stroke-dasharray="5 5"/>`;
+      if (l.key === 'L3') {
+        s += `<circle cx="${cx - 128}" cy="${cy - 9}" r="3.5" fill="var(--ok)"/>` +
+          `<text x="${cx - 116}" y="${cy - 5}" class="dp-silent-main">沉默区 · 好消息：攻击未触及核心</text>` +
+          `<text x="${cx}" y="${cy + 17}" text-anchor="middle" class="dp-silent-sub">窗口内没有事件触及凭据、信任锚或横向移动${d.watch.full_coverage ? '' : '（注意：有采集器不可用，沉默可能含观测盲区）'}</text>`;
+      } else {
+        s += `<text x="${cx}" y="${cy + 4}" text-anchor="middle" class="dp-silent-main">沉默区 · 窗口内该层无事件（不是缺数据）</text>`;
+      }
+      s += `<text x="16" y="${y + 62}" class="dp-layer-cnt">0 条信号</text>`;
+    } else {
+      // 有活动的层：只有层侧一条 2px 语义色线 + 数字着色，不整层染色
+      const sevCol = SEV_VAR[pl.max_severity] || 'var(--neutral)';
+      s += `<line x1="${DP.x0 - 4}" y1="${y + 8}" x2="${DP.x0 - 4}" y2="${y + DP.bandH - 8}" stroke="${sevCol}" stroke-width="2"/>` +
+        `<text x="16" y="${y + 62}" class="dp-layer-cnt"><tspan fill="${sevCol}">${num(pl.count)}</tspan> 条 · ${pl.node_count} 节点</text>`;
+    }
+    return s;
+  }).join('');
+  // 攻击链：中性 2px 折线从外往里往下掉，节点圆点落在对应层
+  const chainSvg = (d.chains || []).map(c => {
+    const ns = (c.node_ids || []).map(id => byId[id]).filter(Boolean);
+    if (!ns.length) return '';
+    const pts = ns.map(n => ({ x: pos[n.id].x, y: pos[n.id].y, n }));
+    const op = (!focus || focus.includes(c.iid)) ? '' : ' opacity="0.15"';
+    let line = '', arrow = '';
+    if (pts.length > 1) {
+      line = `<polyline points="${pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="var(--text)" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round"${op}/>`;
+      const a = pts[pts.length - 2], b = pts[pts.length - 1];
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const tx = b.x - 10 * Math.cos(ang), ty = b.y - 10 * Math.sin(ang);
+      arrow = `<path d="M ${tx - 6 * Math.cos(ang - 0.5)},${ty - 6 * Math.sin(ang - 0.5)} L ${tx},${ty} L ${tx - 6 * Math.cos(ang + 0.5)},${ty - 6 * Math.sin(ang + 0.5)}" fill="none" stroke="var(--text)" stroke-opacity="0.65" stroke-width="2"${op}/>`;
+    } else {
+      const p = pts[0];
+      line = `<line x1="${p.x}" y1="${p.y - 34}" x2="${p.x}" y2="${p.y - 12}" stroke="var(--text)" stroke-opacity="0.5" stroke-width="2"${op}/>` +
+        `<path d="M ${p.x - 4},${p.y - 17} L ${p.x},${p.y - 10} L ${p.x + 4},${p.y - 17}" fill="none" stroke="var(--text)" stroke-opacity="0.6" stroke-width="2"${op}/>`;
+    }
+    const circles = pts.map(p => {
+      const n = p.n, sel = S.depthSel === n.id;
+      return `<g class="dp-node${sel ? ' sel' : ''}" data-nid="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.title)}，${esc(n.layer)}层，${esc(n.severity_cn)}"${dim(n)}>` +
+        (sel ? `<circle cx="${p.x}" cy="${p.y}" r="11.5" fill="none" stroke="var(--text)" stroke-width="1.5"/>` : '') +
+        `<circle cx="${p.x}" cy="${p.y}" r="7" fill="${SEV_VAR[n.severity] || 'var(--neutral)'}" stroke="var(--bg-2)" stroke-width="2"/>` +
+        `<title>${esc(n.title)} · ${esc(n.time)} · ${esc(n.severity_cn)}${n.count > 1 ? ` ×${n.count}` : ''}</title></g>`;
+    }).join('');
+    return line + arrow + circles;
+  }).join('');
+  // 独立信号散点（同规则聚合，×N 在档案里说明）
+  const soloSvg = nodes.filter(n => n.kind === 'finding').map(n => {
+    const p = pos[n.id];
+    const sel = S.depthSel === n.id;
+    return `<g class="dp-node${sel ? ' sel' : ''}" data-nid="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.title)}，${esc(n.layer)}层，${esc(n.severity_cn)}，共${n.count}条"${dim(n)}>` +
+      (sel ? `<circle cx="${p.x}" cy="${p.y}" r="9" fill="none" stroke="var(--text)" stroke-width="1.5"/>` : '') +
+      `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${SEV_VAR[n.severity] || 'var(--neutral)'}" fill-opacity="0.85" stroke="var(--bg-2)" stroke-width="1"/>` +
+      `<title>${esc(n.title)} · 最近 ${esc(n.time)} · ${esc(n.severity_cn)} ×${n.count}</title></g>`;
+  }).join('');
+  return `<svg class="dp-svg" viewBox="0 0 ${DP.w} ${DP.h}" role="img" aria-label="纵深剖面：横轴时间，纵轴攻击深度">${bands}${ticks}${chainSvg}${soloSvg}</svg>`;
+}
+
+function depthDossier(d) {
+  const nodes = d.nodes || [];
+  if (!nodes.length) return '<div class="empty">窗口内没有信号可选。</div>';
+  let n = nodes.find(x => x.id === S.depthSel);
+  if (!n) { n = nodes.find(x => x.id === (d.deepest || {}).node_id) || nodes[nodes.length - 1]; S.depthSel = n.id; }
+  const chain = (d.chains || []).find(c => c.iid === n.iid);
+  const layer = (d.layers || []).find(l => l.key === n.layer) || {};
+  const ev = n.event || {};
+  const kv = [
+    ['时间', esc(n.time)],
+    ['所在层', `${esc(layer.name || n.layer)} · ${esc(layer.desc || '')}`],
+    ['规则', `<code class="hk">${esc(n.rule_id || '—')}</code>`],
+  ];
+  if (n.stage_names && n.stage_names.length) kv.push(['链内阶段', esc(n.stage_names.join(' → '))]);
+  if (n.count > 1) kv.push(['信号数', `×${n.count}（窗口内同规则聚合，展示最近一条）`]);
+  if (n.actor) kv.push(['主体', clip(n.actor, 40)]);
+  if (n.host) kv.push(['主机', esc(n.host)]);
+  const evRows = [];
+  if (ev.kind) evRows.push(['事件类型', esc(ev.kind)]);
+  if (ev.source) evRows.push(['来源', esc(ev.source)]);
+  if (ev.process) evRows.push(['进程', clip(ev.process, 40)]);
+  if (ev.pid) evRows.push(['PID', esc(ev.pid)]);
+  if (ev.user) evRows.push(['用户', clip(ev.user, 32)]);
+  if (ev.cmdline) evRows.push(['命令行', clip(ev.cmdline, 90)]);
+  if (ev.path) evRows.push(['路径', clip(ev.path, 90)]);
+  const chips = (n.mitre || []).map(t => `<span class="dp-chip">${esc(t)}</span>`).join('') +
+    (n.tags || []).map(t => `<span class="dp-chip">${esc(CN.tag[t] || t)}</span>`).join('');
+  const kvHtml = rows => `<div class="kv">${rows.map(r => `<div class="kv-row"><span class="k">${r[0]}</span><span class="v">${r[1]}</span></div>`).join('')}</div>`;
+  return `
+  <div class="dp-dossier-hd">
+    ${sev(n.severity)}
+    <span class="dp-layerchip">${esc(n.layer)} · ${esc(layer.cn || '')}</span>
+    <span class="dp-layerchip">${n.iid ? '攻击链节点' : '独立信号'}</span>
+  </div>
+  <div class="dp-dossier-title">${esc(n.title)}</div>
+  <div class="dp-basis">
+    <div class="dp-basis-h">凭什么判在这一层</div>
+    <div class="dp-basis-b">${esc(n.basis || '')}</div>
+    <div class="dp-basis-m">判定依据：${esc(n.matched_by || '')}</div>
+  </div>
+  ${kvHtml(kv)}
+  ${n.detail ? `<div class="dp-sec">证据摘要</div><div class="dp-detail">${esc(n.detail)}</div>` : ''}
+  ${evRows.length ? `<div class="dp-sec">事件字段</div>${kvHtml(evRows)}` : ''}
+  ${chips ? `<div class="dp-sec">ATT&CK / 标签</div><div class="dp-chips">${chips}</div>` : ''}
+  ${n.advice ? `<div class="dp-advice"><b>处置建议</b>${esc(n.advice)}</div>` : ''}
+  ${chain ? `<div class="dp-sec">所属攻击链</div>
+    <div class="dp-chain-title">${esc(chain.title || '')}</div>
+    <div class="dp-chain-meta">${sev(chain.severity)}<span class="muted">最深 ${esc(chain.deepest || '—')} · ${chain.stage_count} 阶段 · ${esc(chain.first_time || '')} → ${esc(chain.last_time || '')}</span></div>
+    <div class="dp-chain-actions">
+      <button class="btn sm" data-goto="findings">查看告警详情</button>
+      <button class="btn sm" data-goto="timeline">取证时间线</button>
+    </div>` : ''}`;
+}
+
+async function viewDepth() {
+  const d = await API(`/api/depth?hours=${S.depthHours}`);
+  S.depthData = d;
+  const nodes = d.nodes || [];
+  if (!nodes.find(n => n.id === S.depthSel)) S.depthSel = (d.deepest || {}).node_id || (nodes.length ? nodes[nodes.length - 1].id : null);
+  if (S.depthChain) {
+    const alive = new Set((d.chains || []).map(c => c.iid));
+    S.depthChain = S.depthChain.filter(i => alive.has(i));
+    if (!S.depthChain.length) S.depthChain = null;
+  }
+  if (S.o) renderChrome(S.o);   // 更新纵深徽标（当前最深层）
+  const dp = d.deepest;
+  const downCnt = Math.max(0, d.watch.collectors_total - d.watch.collectors_ok);
+  const winBtns = [1, 6, 24].map(h => `<button class="btn sm dp-win${S.depthHours === h ? ' on' : ''}" data-hours="${h}">${h} 小时</button>`).join('');
+  let hero;
+  if (!nodes.length) {
+    hero = `<div class="dp-hero-l">
+      <div class="dp-hero-k">窗口内四层全部沉默</div>
+      <div class="dp-hero-v"><span class="dp-dot" style="background:var(--ok)"></span>没有观测到攻击信号</div>
+      <div class="dp-hero-s">${d.watch.full_coverage ? '全部采集器在线，这是好消息。' : `注意：${downCnt} 路采集器不可用，沉默可能含观测盲区。`}</div>
+    </div>`;
+  } else {
+    const col = SEV_VAR[dp.severity] || 'var(--text)';
+    hero = `<div class="dp-hero-l">
+      <div class="dp-hero-k">攻击当前推进到</div>
+      <div class="dp-hero-v"><span class="dp-dot" style="background:${col}"></span><span style="color:${col}">${esc(dp.layer)}</span> · ${esc(dp.layer_cn)}</div>
+      <div class="dp-hero-s">${esc(dp.time)} · ${esc(dp.chain_title || dp.title)}${dp.iid ? '' : '（独立信号）'}</div>
+    </div>`;
+  }
+  const coreBanner = (d.core_silent && nodes.length) ? `<div class="dp-core-silent">
+      <span class="dp-dot" style="background:var(--ok)"></span>
+      <div><b>核心层沉默区 —— 这是好消息。</b>窗口内没有事件触及凭据、信任锚或横向移动。${downCnt ? `<span class="muted">（${downCnt} 路采集器不可用：沉默可能含观测盲区，不能当作绝对安全。）</span>` : ''}</div>
+    </div>` : '';
+  // 同名链分组：多条「侦察推进链」不该变成一排一模一样的 chip
+  const sevRank = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+  const groups = new Map();
+  (d.chains || []).forEach(c => {
+    const k = (c.title || '') + '|' + (c.deepest || '');
+    if (!groups.has(k)) groups.set(k, { title: c.title, deepest: c.deepest, severity: c.severity, iids: [] });
+    const g = groups.get(k);
+    g.iids.push(c.iid);
+    if ((sevRank[g.severity] || 0) < (sevRank[c.severity] || 0)) g.severity = c.severity;
+  });
+  const focusKey = (S.depthChain || []).join(',');
+  const chainChips = `<button class="dp-chainchip${!S.depthChain ? ' on' : ''}" data-iids="">全部信号</button>` +
+    [...groups.values()].map(g => `<button class="dp-chainchip${focusKey === g.iids.join(',') ? ' on' : ''}" data-iids="${esc(g.iids.join(','))}" title="${esc(g.title || '')}（${g.iids.length} 条同类链，点击聚焦）">
+      <span class="dp-dot" style="background:${SEV_VAR[g.severity] || 'var(--neutral)'}"></span>${esc(clipText(g.title || g.iids[0], 22))}${g.iids.length > 1 ? `<span class="dp-chain-deepest">×${g.iids.length}</span>` : ''}<span class="dp-chain-deepest">${esc(g.deepest || '')}</span>
+    </button>`).join('');
+  return `
+  ${panel('纵深剖面', `
+    <div class="dp-hero">${hero}
+      <div class="dp-hero-r">${winBtns}<button class="btn sm" id="dp-refresh">刷新</button>
+        <div class="dp-hero-ts">数据时间 ${esc(d.now || '')} · 窗口 ${esc(d.window.since || '')} → ${esc(d.window.until || '')}</div>
+      </div>
+    </div>
+    ${coreBanner}
+    <div class="dp-grid">
+      <div class="dp-chart">
+        ${depthSvg(d)}
+        <div class="dp-legend">
+          <span><i class="dp-dot" style="background:var(--bad)"></i>严重</span>
+          <span><i class="dp-dot" style="background:var(--warn)"></i>高危</span>
+          <span><i class="dp-dot" style="background:var(--amber)"></i>中危</span>
+          <span><i class="dp-dot" style="background:var(--info)"></i>低危</span>
+          <span><i class="dp-dot" style="background:var(--neutral)"></i>信息</span>
+          <span class="dp-legend-note">折线＝攻击链推进 · 散点＝独立信号（同规则聚合）· 虚线框＝沉默区 · 层侧 2px 线＝该层有活动</span>
+        </div>
+        <div class="dp-chains">${chainChips}</div>
+      </div>
+      <div class="dp-dossier" id="dp-dossier">${depthDossier(d)}</div>
+    </div>`, { tag: '时间 × 深度', actions: '<span class="panel-tag mint">只读投影 · 不新增检测</span>' })}
+  ${panel('怎么读这张图', `<div class="kv">
+      <div class="kv-row"><span class="k">纵轴</span><span class="v">攻击者的穿透深度：L0 外部（暴露面/网络弱信号）→ L1 边界（认证/执行跨越）→ L2 主机（立足点后的活动）→ L3 核心（凭据/信任锚/横向）。按攻击者深度归层，不按传感器位置——NDR 看到心跳，说明主机已有驻留体，归 L2。</span></div>
+      <div class="kv-row"><span class="k">横轴</span><span class="v">时间。折线从外往里往下掉，就是攻击推进的方向；节点落在哪层，攻击就到了哪层。</span></div>
+      <div class="kv-row"><span class="k">沉默区</span><span class="v">某层窗口内无事件时画虚线框并写明「沉默区」，不是空白轨道。最内层沉默是好消息；但采集器掉线时会注明观测盲区，沉默不等于绝对安全。</span></div>
+      <div class="kv-row"><span class="k">凭什么这么判</span><span class="v">点任意节点，右侧档案给出判定依据。映射优先级：规则直 hit → MITRE 标签（最深优先）→ 事件类型 → 保守默认 L2（未识别信号不往浅了放）。</span></div>
+    </div>`, { tag: '读法' })}
+  ${panel('层级映射依据（只读）', `<details class="dp-map"><summary>展开 ${d.mapping.rules.length} 条规则映射 + 标签/事件类型兜底</summary>
+      <div class="table-wrap"><table><thead><tr><th>规则</th><th>层</th><th>依据</th></tr></thead><tbody>
+      ${d.mapping.rules.map(r => `<tr><td class="mono">${esc(r.rule_id)}</td><td>${esc(r.layer)}</td><td>${esc(r.basis)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="dp-map-fallback">标签兜底（最深优先）：${d.mapping.tags.map(t => `${esc(t.tag)}→${esc(t.layer)}`).join(' · ')}<br>
+      事件类型兜底：${d.mapping.kinds.map(k => `${esc(k.kind)}→${esc(k.layer)}`).join(' · ')}<br>
+      保守默认：${esc(d.mapping.default.layer)} —— ${esc(d.mapping.default.basis)}</div>
+    </details>`, { tag: '可审计' })}`;
+}
+
+function bindDepth() {
+  const d = S.depthData;
+  if (!d) return;
+  const rerender = () => {
+    const svg = $('.dp-svg');
+    if (svg) svg.outerHTML = depthSvg(d);
+    const dos = $('#dp-dossier');
+    if (dos) dos.innerHTML = depthDossier(d);
+    $$('.dp-chainchip').forEach(b => b.classList.toggle('on', (b.dataset.iids || '') === (S.depthChain || []).join(',')));
+  };
+  $$('.dp-win').forEach(b => b.addEventListener('click', () => { S.depthHours = Number(b.dataset.hours); render(); }));
+  const rf = $('#dp-refresh');
+  if (rf) rf.addEventListener('click', () => render());
+  const chart = $('.dp-chart');
+  if (!chart) return;
+  const selectNode = nid => {
+    S.depthSel = nid;
+    rerender();
+    const g = $(`.dp-node[data-nid="${nid}"]`);
+    if (g) g.focus();
+    if (window.innerWidth < 1100) { const dos = $('#dp-dossier'); if (dos) dos.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  };
+  chart.addEventListener('click', e => {
+    const g = e.target.closest('.dp-node');
+    if (g) { selectNode(g.dataset.nid); return; }
+    const chip = e.target.closest('.dp-chainchip');
+    if (chip) { S.depthChain = chip.dataset.iids ? chip.dataset.iids.split(',') : null; rerender(); }
+  });
+  chart.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const g = e.target.closest('.dp-node');
+    if (g) { e.preventDefault(); selectNode(g.dataset.nid); }
+  });
+}
+
+/* ---------------- 视图：容器态势（Docker 只读） ---------------- */
+async function viewDocker() {
+  const d = await API('/api/docker');
+  const badge = $('#b-docker');
+  if (!d || d.available === false) {
+    if (badge) badge.hidden = true;
+    const reason = (d && d.reason) || '接口无返回';
+    return `
+    ${panel('容器态势', `<div class="empty">
+      读不到 Docker：${esc(reason)}<br><br>
+      可能是没装 Docker、Docker Desktop 没启动，或当前用户没有读 docker.sock 的权限。<br>
+      这不影响其余采集与检测；装好并启动 Docker 后点右上「刷新」就能看到容器与镜像。
+    </div>`, { tag: '只读' })}`;
+  }
+  const t = d.totals || {}, dm = d.daemon || {}, defs = d.flag_defs || {};
+  if (badge) {
+    badge.hidden = !(t.flagged_containers > 0);
+    badge.textContent = String(t.flagged_containers || 0);
+  }
+  const sevVar = { critical: 'var(--bad)', high: 'var(--warn)', medium: 'var(--amber)', low: 'var(--info)' };
+  const flagBadge = f => `<span class="dflag dflag-${esc(f.severity)}" title="${esc((defs[f.key] || {}).desc || '')}">${esc(f.label)}</span>`;
+  const sumRows = Object.keys(defs).map(k => {
+    const def = defs[k], n = (t.flags || {})[k] || 0;
+    return `<div class="dsum-row">
+      <span class="dflag dflag-${esc(def.severity)}">${esc(def.label)}</span>
+      <span class="n" style="color:${n ? sevVar[def.severity] : 'var(--faint)'}">${num(n)}</span>
+      <span class="why" title="${esc(def.desc || '')}">${esc(def.desc || '')}</span>
+    </div>`;
+  }).join('');
+  const rows = (d.containers || []).map(c => [
+    `<b>${esc(c.name)}</b>`,
+    `<span class="mono">${clip(c.image, 38)}</span>`,
+    `<span class="st ${c.running ? 'st-pass' : 'st-unknown'}">${esc(c.state_cn || c.state)}</span>`,
+    (c.ports && c.ports.length)
+      ? `<span class="mono">${clip(c.ports.join(' · '), 30)}</span>`
+      : '<span class="st st-unknown">未发布</span>',
+    `<span class="mono">${esc(c.user || '—')}</span>`,
+    (c.flags && c.flags.length) ? c.flags.map(flagBadge).join('') : '<span class="dflag dflag-ok">未见风险标记</span>',
+    `<span class="mono">${esc(tsStr(c.created))}</span>`,
+  ]);
+  const imgRows = (d.images || []).map(i => [
+    (i.tags && i.tags.length)
+      ? `<span class="mono">${clip(i.tags.join(', '), 44)}</span>`
+      : `<span class="dflag dflag-low">无标签</span> <span class="mono">${esc(i.id)}</span>`,
+    `<span class="mono">${esc(i.size_cn)}</span>`,
+    (i.used_by && i.used_by.length)
+      ? esc(i.used_by.join('、'))
+      : '<span class="st st-unknown">未被使用</span>',
+    `<span class="mono">${esc(tsStr(i.created))}</span>`,
+  ]);
+  return `
+  <div class="kpis">
+    ${kpi('容器', num(t.containers || 0), `运行 ${num(t.running || 0)} · 停止 ${num(t.stopped || 0)}`, 'var(--mint)')}
+    ${kpi('镜像', num(t.images || 0), `无标签 ${num(t.dangling_images || 0)} 个`, 'var(--blue)')}
+    ${kpi('带风险标记的容器', num(t.flagged_containers || 0),
+      (t.flagged_containers || 0) ? '配置事实，非入侵判定，详见下表' : '未见已知风险配置',
+      (t.flagged_containers || 0) ? 'var(--red)' : 'var(--ok)')}
+    ${kpi('Docker 引擎', esc(dm.version || '—'),
+      `${esc(dm.os || '')} · ${esc(dm.arch || '')} · ${num(dm.ncpu || 0)} 核 · ${esc(dm.mem_cn || '')}`, 'var(--blue)')}
+  </div>
+  ${panel('安全标记汇总', `<div class="dsum">${sumRows}</div>
+    <div class="dnote">标记来自容器配置事实：只读 GET docker.sock（纯标准库，不调 docker CLI，无任何写操作）。
+    攻防靶机带标记属预期；inspect 读不到的容器，运行用户与特权状态记「未知」，不猜。</div>`,
+    { tag: `${num(t.flagged_containers || 0)} 个容器命中` })}
+  ${panel('容器', table([
+    { t: '名称' }, { t: '镜像' }, { t: '状态' }, { t: '端口映射' }, { t: '运行用户' }, { t: '安全标记' }, { t: '创建时间' },
+  ], rows, { empty: 'Docker 在运行，但还没有容器' }), { tag: `${num(t.containers || 0)} 个` })}
+  ${panel('镜像', table([
+    { t: '标签' }, { t: '大小' }, { t: '被哪些容器使用' }, { t: '创建时间' },
+  ], imgRows, { empty: '没有镜像' }), { tag: `${num(t.images || 0)} 个` })}`;
+}
+
 const VIEWS = {
   overview: () => viewOverview(),
   wall: viewWall,
+  depth: viewDepth,
   findings: viewFindings,
   timeline: viewTimeline,
   telemetry: viewTelemetry,
@@ -1375,6 +1776,7 @@ const VIEWS = {
   playbooks: viewPlaybooks,
   tickets: viewTickets,
   inventory: viewInventory,
+  docker: viewDocker,
   compliance: viewCompliance,
   baseline: viewBaseline,
   response: viewResponse,
@@ -1393,6 +1795,7 @@ async function render(view) {
     root.innerHTML = html;
     bindTabs();
     if (S.view === 'findings') bindFindings();
+    if (S.view === 'depth') bindDepth();
   } catch (e) {
     $('#root').innerHTML = panel('加载失败', `<pre class="out">${esc(e.message || e)}</pre>`, { tagCls: 'red', tag: '错误' });
   }
@@ -1542,9 +1945,9 @@ function connectSSE() {
 }
 
 /* ---------------- 主题与版本 ---------------- */
-const THEMES = ['dark', 'dusk', 'light'];
+const THEMES = ['dark', 'light'];
 function applyTheme(name) {
-  const t = THEMES.indexOf(name) >= 0 ? name : 'dark';
+  const t = THEMES.indexOf(name) >= 0 ? name : 'light';
   document.documentElement.setAttribute('data-theme', t);
   try { localStorage.setItem('atfield.theme', t); } catch (e) { /* 隐私模式忽略 */ }
   $$('#theme-sw .tsw').forEach(b => b.classList.toggle('on', b.dataset.theme === t));
@@ -1552,7 +1955,8 @@ function applyTheme(name) {
 function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem('atfield.theme'); } catch (e) {}
-  applyTheme(saved || 'dark');
+  if (saved === 'dusk') saved = 'light';   // 暖墨已移除：旧选择迁到当前默认
+  applyTheme(saved || 'light');
   const sw = $('#theme-sw');
   if (sw) sw.addEventListener('click', e => {
     const b = e.target.closest('.tsw');
@@ -1639,7 +2043,7 @@ async function boot(relogin) {
     boot._timer = setInterval(() => {
       const ae = document.activeElement;
       const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
-      if (!typing && S.view !== 'overview' && S.view !== 'collectors' && S.view !== 'governance') render();
+      if (!typing && S.view !== 'overview' && S.view !== 'collectors' && S.view !== 'governance' && S.view !== 'depth') render();
       else if (S.view === 'governance' && !typing) render();
     }, 12000);
   }
