@@ -45,6 +45,31 @@ def _print_banner(core: Core, url: str) -> None:
     print("")
 
 
+def _print_credscan(res: dict) -> None:
+    """把盘点结果打成人类可读的表。所有凭据字段已是脱敏值，这里不做二次拼接。"""
+    totals = res.get("totals") or {}
+    print(f"\n凭据静态暴露盘点（只读，不修改任何文件）")
+    print(f"  扫描文件 {res.get('files_scanned', 0)} 个 / 命中 {totals.get('hits', 0)} 条"
+          f" / 涉及文件 {totals.get('files_with_hits', 0)} 个"
+          f" / 用时 {res.get('elapsed_ms', 0)} ms")
+    print(f"  扫描根 {', '.join(res.get('roots') or [])}")
+    sev_cn = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
+    hits = res.get("hits") or []
+    for h in hits[:40]:
+        risks = "；".join(h.get("risks") or []) or "明文落盘"
+        print(f"  [{sev_cn.get(h['severity'], h['severity'])}] {h.get('kind_cn')} "
+              f"{h.get('masked')}")
+        print(f"        {h.get('path')}:{h.get('line')}")
+        print(f"        {risks}")
+    if not (res.get("hits") or []):
+        print("  未发现明文凭据散落（白名单与排除目录已生效）")
+    elif len(hits) > 40:
+        print(f"  ……仅显示前 40 条（共 {len(hits)} 条）；完整清单用 --credscan-json")
+    if res.get("truncated"):
+        print("  注意：达到文件数/时间上限，结果不完整；缩小 --credscan 目录或调大 credscan.max_files")
+    print(f"  脱敏口径：{((res.get('redaction') or {}).get('policy'))}\n")
+
+
 def _ask_pw(twice: bool = True) -> str:
     pw = getpass.getpass("新口令: ")
     if twice:
@@ -137,6 +162,130 @@ def cmd_once(core: Core, out: str | None) -> int:
     return 0
 
 
+def _decoy_pid_path(cfg: dict) -> str:
+    base = cfg.get("data_dir") or os.path.expanduser("~/.atfield")
+    return os.path.join(base, "decoy", "decoy.pid")
+
+
+def _pid_cmdline(pid: int) -> str:
+    """读 pid 的命令行，用于停进程前确认「这是我们的诱饵」而不是别的进程。"""
+    try:
+        import subprocess
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+                             capture_output=True, text=True, timeout=3)
+        return (out.stdout or "").strip()
+    except Exception:
+        return ""
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def cmd_decoy_status(core: Core) -> int:
+    print(json.dumps(core.decoy.status(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_decoy_stop(cfg: dict) -> int:
+    """停掉别的终端里 --decoy-start 起的前台诱饵。
+
+    只按 pid 文件杀，且必须先核对命令行确实是 `atfieldd.py ... --decoy-start`：
+    pid 会被系统复用，盲杀等于随机杀用户进程。
+    控制台里启动的诱饵不走这条路，用 POST /api/decoy/stop。
+    """
+    pid_path = _decoy_pid_path(cfg)
+    if not os.path.isfile(pid_path):
+        print(f"没有 pid 文件（{pid_path}）：当前没有由 --decoy-start 起的前台诱饵。\n"
+              f"控制台内启停请用 POST /api/decoy/stop，或在前台窗口按 Ctrl-C。")
+        return 1
+    try:
+        with open(pid_path, "r", encoding="utf-8") as fh:
+            info = json.load(fh)
+        pid = int(info.get("pid") or 0)
+    except Exception:
+        print(f"pid 文件无法解析，未杀任何进程：{pid_path}")
+        return 1
+    if pid <= 0 or pid == os.getpid():
+        print(f"pid 文件里的 pid 不可用（{pid}），未杀任何进程")
+        return 1
+    cmdline = _pid_cmdline(pid)
+    if "atfieldd.py" not in cmdline or "--decoy-start" not in cmdline:
+        print(f"拒绝停止 pid {pid}：命令行不像诱饵进程（{cmdline[:120] or '读不到'}）；"
+              f"已保留 pid 文件供人工核对")
+        return 1
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as exc:
+        print(f"发送 SIGTERM 失败：{exc}")
+        return 1
+    for _ in range(40):
+        if not _pid_alive(pid):
+            break
+        time.sleep(0.1)
+    alive = _pid_alive(pid)
+    if not alive:
+        try:
+            os.unlink(pid_path)
+        except OSError:
+            pass
+    print(f"诱饵进程 {pid} {'已停止' if not alive else '仍在退出中（SIGTERM 已发出）'}")
+    return 0 if not alive else 1
+
+
+def cmd_decoy_run(core: Core, cfg: dict) -> int:
+    """前台跑诱饵：事件即时打印，Ctrl-C 停。不 fork、不留后台进程。"""
+    res = core.decoy.start()
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        core.stop()
+        return 2
+    pid_path = _decoy_pid_path(cfg)
+    try:
+        os.makedirs(os.path.dirname(pid_path), mode=0o700, exist_ok=True)
+        with open(pid_path, "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "started_at": time.time(),
+                       "bind": core.decoy.bind, "ports": res.get("ports")}, fh)
+        os.chmod(pid_path, 0o600)
+    except OSError:
+        pass
+    print(f"\n诱饵端口监听中：{core.decoy.bind}:{res.get('ports')}"
+          f"（日志 {core.decoy.log_path}）\n按 Ctrl-C 停止\n")
+    state = {"stop": False}
+
+    def _on_sig(signum, frame):
+        state["stop"] = True
+
+    old_int = signal.signal(signal.SIGINT, _on_sig)
+    old_term = signal.signal(signal.SIGTERM, _on_sig)
+    printed = 0
+    try:
+        while not state["stop"]:
+            time.sleep(0.5)
+            if core.decoy.event_count() > printed:
+                for ev in core.decoy.events_since(printed):
+                    print(f"  {ev['iso']}  {ev['peer_ip']}:{ev['peer_port']} "
+                          f"-> :{ev['listen_port']}  {ev['bytes']}B  "
+                          f"{ev['preview'][:60]}")
+                    printed += 1
+    finally:
+        signal.signal(signal.SIGINT, old_int)
+        signal.signal(signal.SIGTERM, old_term)
+        stopped = core.decoy.stop()
+        try:
+            os.unlink(pid_path)
+        except OSError:
+            pass
+        print(f"\n诱饵端口已停止：{stopped.get('ports')}，"
+              f"本次共记录 {stopped.get('connections', 0)} 次连接")
+        core.stop()
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="atfieldd", description="心之壁 终端作战态势感知平台")
     ap.add_argument("--bind", default="", help="监听地址（默认 127.0.0.1）")
@@ -162,6 +311,14 @@ def main(argv=None) -> int:
     ap.add_argument("--month", default="", help="月份 YYYY-MM（默认本月）")
     ap.add_argument("--send", action="store_true", help="月度报告生成后尝试邮件投递")
     ap.add_argument("--rules-reload", action="store_true", help="重载内置与外部规则包")
+    # ---- 静态暴露面：凭据盘点 / 诱饵端口 ----
+    ap.add_argument("--credscan", nargs="?", const="", default=None, metavar="DIR",
+                    help="凭据静态暴露盘点（只读、输出脱敏）；可给单个目录或逗号分隔多个")
+    ap.add_argument("--credscan-json", action="store_true", help="配合 --credscan 输出完整 JSON")
+    ap.add_argument("--decoy-start", action="store_true",
+                    help="前台启动诱饵端口（Ctrl-C 停止；不写 pid 残留）")
+    ap.add_argument("--decoy-stop", action="store_true", help="停止由 --decoy-start 起的前台诱饵")
+    ap.add_argument("--decoy-status", action="store_true", help="查看诱饵端口配置与落盘日志")
     ap.add_argument("--update-status", action="store_true", help="查看更新通道状态")
     ap.add_argument("--update-apply", default="", metavar="DIR", help="应用更新包目录")
     ap.add_argument("--update-rollback", action="store_true", help="回滚到最近可用版本")
@@ -295,6 +452,29 @@ def main(argv=None) -> int:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         core.stop()
         return 0 if res.get("ok", True) else 2
+
+    if args.credscan is not None:
+        _roots = [x.strip() for x in str(args.credscan or "").split(",") if x.strip()]
+        res = core.credscan.scan(roots=_roots or None)
+        if args.credscan_json:
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        else:
+            _print_credscan(res)
+        core.stop()
+        return 0 if res.get("ok") else 2
+
+    if args.decoy_status:
+        rc = cmd_decoy_status(core)
+        core.stop()
+        return rc
+
+    if args.decoy_stop:
+        rc = cmd_decoy_stop(cfg)
+        core.stop()
+        return rc
+
+    if args.decoy_start:
+        return cmd_decoy_run(core, cfg)
 
     if args.selftest:
         res = core.self_test()

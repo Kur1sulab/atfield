@@ -145,6 +145,30 @@ DEFAULTS: Dict[str, Any] = {
         "domains": [],
         "ips": [],
     },
+    # 凭据静态暴露盘点：只读扫描 + 输出强制脱敏（mask_keep 只能调小，上限 6）
+    "credscan": {
+        "enabled": True,
+        "roots": [],                  # 空 = 内置常规落点（~/.ssh/.aws/.config、Desktop/Documents 等）
+        "max_files": 3000,
+        "max_bytes": 262144,
+        "max_seconds": 15.0,
+        "min_severity": "low",
+        "mask_keep": 6,
+        "whitelist_enabled": True,
+        "whitelist": [],              # 追加白名单 glob（默认已含 tests/fixtures/*.sample）
+        "exclude": [],                # 追加排除目录（绝对路径前缀）
+    },
+    # 诱饵端口：默认关闭；只绑回环，非回环必须 allow_non_loopback=true 显式打开
+    "decoy": {
+        "enabled": False,
+        "bind": "127.0.0.1",
+        "allow_non_loopback": False,
+        "ports": [2222, 3389, 5900],
+        "banner": "SSH-2.0-OpenSSH_9.6\r\n",
+        "max_conns": 200,
+        "read_bytes": 512,
+        "log_keep": 2000,
+    },
 }
 
 

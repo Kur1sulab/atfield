@@ -40,6 +40,10 @@ POST_CAP: Dict[str, str] = {
     "/api/firewall/flush": "admin",
     "/api/firewall/attach": "admin",
     "/api/firewall/detach": "admin",
+    # 凭据盘点只读但耗 CPU，给 triage；诱饵端口启停是本机监听动作，给 respond
+    "/api/credscan/scan": "triage",
+    "/api/decoy/start": "respond",
+    "/api/decoy/stop": "respond",
 }
 
 
@@ -339,6 +343,26 @@ def _make_handler(core):
                     return self._json(core.firewall.summary())
                 if path == "/api/canary":
                     return self._json(core.canary.status())
+                if path == "/api/credscan":
+                    # 凭据静态暴露盘点：只读扫描，返回体强制脱敏（前 6 位 + 长度）。
+                    # ?status=1 只看配置与上次结果，不触发新扫描。
+                    if not self._guard("read"):
+                        return
+                    if self._q(q, "status") == "1":
+                        return self._json(core.credscan.status())
+                    _roots = [x.strip() for x in (self._q(q, "roots") or "").split(",")
+                              if x.strip()]
+                    try:
+                        return self._json(core.credscan.scan(
+                            roots=_roots or None,
+                            limit=int(self._q(q, "limit", "200") or 200)))
+                    except Exception as exc:
+                        return self._err(f"{type(exc).__name__}: {exc}", 500)
+                if path == "/api/decoy":
+                    # 诱饵端口状态：默认未启用/未监听，这里如实回 running=false
+                    if not self._guard("read"):
+                        return
+                    return self._json(core.decoy.status())
                 if path == "/api/ndr":
                     return self._json(core.netintel.status())
                 if path == "/api/playbooks":
@@ -561,6 +585,28 @@ def _make_handler(core):
                 if path == "/api/canary/undeploy":
                     _res = core.canary.undeploy()
                     self._audit("canary.undeploy", "canary", _res, sess)
+                    return self._json(_res)
+                if path == "/api/credscan/scan":
+                    # 只读扫描：审计只记条数与耗时，不记路径清单（路径本身可能带业务信息）
+                    _roots = body.get("roots") or []
+                    if isinstance(_roots, str):
+                        _roots = [x.strip() for x in _roots.split(",") if x.strip()]
+                    _res = core.credscan.scan(roots=_roots or None,
+                                              limit=int(body.get("limit") or 200))
+                    self._audit("credscan.scan", "static-credentials", _res, sess,
+                                detail={"hits": (_res.get("totals") or {}).get("hits", 0),
+                                        "files": _res.get("files_scanned", 0),
+                                        "elapsed_ms": _res.get("elapsed_ms", 0)})
+                    return self._json(_res)
+                if path == "/api/decoy/start":
+                    _ports = body.get("ports")
+                    _want = [int(p) for p in _ports] if isinstance(_ports, list) and _ports else None
+                    _res = core.decoy.start(_want)
+                    self._audit("decoy.start", "decoy", _res, sess)
+                    return self._json(_res, 200 if _res.get("ok") else 400)
+                if path == "/api/decoy/stop":
+                    _res = core.decoy.stop()
+                    self._audit("decoy.stop", "decoy", _res, sess)
                     return self._json(_res)
                 if path == "/api/playbooks/reload":
                     _res = core.playbooks.reload()

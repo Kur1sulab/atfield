@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from . import __version__, collectors, compliance, scoring
 from . import ai as ai_mod
+from . import credscan as credscan_mod
+from . import decoy as decoy_mod
 from . import firewall as firewall_mod
 from . import audit as audit_mod
 from . import auth as auth_mod
@@ -115,6 +117,10 @@ class Core:
         self.ueba = UEBA(cfg, self.store)
         self.netintel = NetIntel(cfg, self.store, self.intel)
         self.canary = Canary(cfg, self.store)
+        # 静态暴露面：凭据盘点（只读）与诱饵端口（默认关闭，需显式启动）
+        self.credscan = credscan_mod.Scanner(cfg)
+        self.decoy = decoy_mod.Decoy(cfg)
+        self.decoy.set_audit(self.audit)
         self.inventory = Inventory(cfg, self.store)
         self.playbooks = Playbooks(cfg, self.store, self.responder)
         # AI 研判层：能跑就挂，配置缺失也只是少一块功能，不影响采集与检测
@@ -209,6 +215,11 @@ class Core:
 
     # ---------- 生命周期 ----------
     def start(self) -> None:
+        # 诱饵端口：配置默认 false，只有显式打开才监听；失败不影响主流水线
+        try:
+            self.decoy.start_if_enabled()
+        except Exception:
+            pass
         for c in self.collectors:
             if c.enabled and getattr(c, "mode", "poll") == "stream":
                 try:
@@ -221,6 +232,10 @@ class Core:
 
     def stop(self) -> None:
         self._stop.set()
+        try:
+            self.decoy.stop()      # 先关诱饵：不把监听留到进程退出
+        except Exception:
+            pass
         for c in self.collectors:
             try:
                 c.close()
@@ -421,6 +436,8 @@ class Core:
                 "intel": self.intel.stats(),
                 "ueba": self.ueba.status(),
                 "canary": self.canary.status(),
+                "credscan": self.credscan.status(),
+                "decoy": self.decoy.status(),
                 "ndr": self.netintel.status(),
                 "playbooks": self.playbooks.status(),
                 "inventory": self.inventory.status(),
