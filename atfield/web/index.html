@@ -22,9 +22,12 @@
     localStorage.setItem("atfield.theme", t);
   } catch (e) {}
   document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.setAttribute("data-artex", t === "dark" ? "dark" : "light");
 })();
 </script>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="aegis-artex.css">
+<link rel="stylesheet" href="artex.css">
 </head>
 <body>
 <div class="login" id="login" hidden>
