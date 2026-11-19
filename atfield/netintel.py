@@ -20,6 +20,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .dnsintel import DnsIntel
+from .intel import hit_counts, hit_severity
 from .model import Event
 
 # ---------------- 信标检测阈值（多信号打分，全部集中在此便于调参） ----------------
@@ -168,11 +169,20 @@ class NetIntel:
                                f"{ev.process} 连接 {host}（{hit.get('note')}）",
                                "medium" if hit.get("rule") == "exact" else "low",
                                {"ip": rip, "domain": host, "rule": hit.get("rule")})
+
+            # 情报闸门：IP 命中不依赖反查到的域名 —— 直连 IP（反查无果）恰恰最该查 IOC。
+            # 等级由 intel（CIDR 最长前缀 + allowlist + 置信度衰减）算，_flag 内再兜一次。
+            if self.intel:
                 hh = self.intel.match_ip(rip)
-                if hh:
+                if hit_counts(hh):
                     self._flag(out, ev, "ioc_ip",
-                               f"{ev.process} 连接情报库命中 IP {rip}（来源 {hh.get('source')}）",
-                               "high", {"ip": rip, "source": hh.get("source")})
+                               f"{ev.process} 连接情报库命中 IP {rip}"
+                               f"（来源 {hh.get('source')}，分数 {hh.get('score')}，"
+                               f"{hh.get('lifecycle') or ''}）",
+                               hit_severity(hh, "low"),
+                               {"ip": rip, "source": hh.get("source"),
+                                "score": hh.get("score"),
+                                "gate_severity": hh.get("severity")})
 
             # ---- DNS 形态判定：与 IOC 名单无关，名单里没有的域名也要过一遍 ----
             # 暖机期 dns.observe 对外一律返回 ok，这里天然不会出事件（冷启动纪律）。
@@ -298,8 +308,38 @@ class NetIntel:
                         "trend_penalty": round(penalty, 3)},
         }
 
+    def _grade(self, kind: str, severity: str, subject: dict) -> Optional[str]:
+        """情报类信号的定级闸门（2026-11-19 接线）。
+
+        ioc_ip 只认 intel 算出来的分档：即使调用方传了 "high"，落在保留/共享网段
+        （allowlist 前置）或衰减到期的命中也不会变成高危；无闸门时只给最低档。
+        返回值 None = 不再计分，调用方直接丢弃该事件。
+        其余信号（beaconing / direct_ip / risky_port / dga …）是行为形态判据，
+        保持自身等级不动。
+        """
+        if kind != "ioc_ip":
+            return severity
+        if self.intel is None:
+            return "low"
+        ip = str(subject.get("ip") or "")
+        dom = str(subject.get("domain") or "")
+        try:
+            hit = self.intel.match_ip(ip) if ip else None
+            if hit is None and dom:
+                hit = self.intel.match_domain(dom)
+        except Exception:
+            hit = None
+        if not hit_counts(hit):
+            return None
+        return hit_severity(hit, "low")
+
     def _flag(self, out: List[Event], ev: Event, kind: str, text: str,
               severity: str, subject: dict) -> None:
+        subject = subject or {}
+        graded = self._grade(kind, severity, subject)
+        if graded is None:
+            return
+        severity = graded
         key = f"{kind}|{ev.process}|{subject.get('ip') or subject.get('domain') or ''}"
         now = time.time()
         if now - self._flag_seen.get(key, 0) < self.flag_cooldown:

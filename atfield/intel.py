@@ -77,6 +77,62 @@ def score_to_severity(score: float) -> str:
     return "medium"
 
 
+# 2026-11-19 接线：三处调用点（AEG-043 / NetIntel._flag / FUSION_MAP）统一用下面的
+# 函数折算定级，禁止任何一处再写死 critical/high。闸门语义：
+#   ① 命中必须是闸门算出来的（CIDR 最长前缀 + allowlist 前置 + 置信度衰减）；
+#   ② 衰减到期（score=0，即 t ≥ τ）视为「不再计分」，不得再作为定级依据；
+#   ③ fail-safe：拿不到闸门结果时只能给到最低档，绝不回落到写死的 critical/high。
+SEV_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+def hit_counts(hit: Optional[dict]) -> bool:
+    """这次命中还算不算分：无命中 / 衰减归零 → False。"""
+    if not hit:
+        return False
+    try:
+        return float(hit.get("score") or 0.0) > 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def hit_severity(hit: Optional[dict], default: str = "low") -> str:
+    """命中 → 定级。只认闸门的 severity；score 归零或字段缺失时退回 default（不猜高档）。"""
+    if not hit_counts(hit):
+        return default
+    sev = str(hit.get("severity") or "")
+    return sev if sev in SEV_RANK else score_to_severity(float(hit.get("score") or 0.0))
+
+
+def grade_event_severity(ev, intel, fallback: str = "low") -> str:
+    """给一条 NDR 事件按情报闸门定级（core.FUSION_MAP 用）。
+
+    取事件主体里的 ip/domain 回查 intel：
+      命中且未衰减 → 闸门分档；
+      落在 retain/allowlist（私网、保留段、Cloudflare 等）→ 直接压到 low，永不高危；
+      无命中 → 交回 fallback（事件自带等级，netintel 侧已过闸门）。
+    """
+    if intel is None:
+        return fallback
+    sub = getattr(ev, "subject", None) or {}
+    ip = str(sub.get("ip") or sub.get("rip") or "")
+    dom = str(sub.get("domain") or "")
+    try:
+        hit = intel.match_ip(ip) if ip else None
+        if hit is None and dom:
+            hit = intel.match_domain(dom)
+        if hit is not None:
+            # 闸门命中即为权威：衰减归零 → 不再计分（low），不回落到事件自带等级
+            return hit_severity(hit, "low")
+        # 闸门无命中：保留/共享基础设施不得凭事件自带等级抬到 critical/high
+        if ip and intel.warnings.check_ip(ip) is not None:
+            return "low"
+        if dom and intel.warnings.check_domain(dom) is not None:
+            return "low"
+    except Exception:
+        return fallback
+    return fallback
+
+
 def lifecycle_state(age_days: float, ttl_days: float, score: float) -> str:
     """过期降级不删除：block（可作阻断依据）→ alert（只告警）→ archive（归档）。"""
     if age_days <= ttl_days and score >= HIGH_AT:
@@ -98,6 +154,7 @@ class Intel:
         files = icfg.get("warninglist_files") or cfg.get("warninglist_files") or []
         wdir = icfg.get("warninglist_dir") or os.path.join(cfg["data_dir"], "warninglists")
         self.warnings: WarningLists = build_warninglists(files=files, directory=wdir)
+        self._seed_config()
         self._migrate_save()
         self.store.set_state("intel", self.stats())
 
@@ -143,6 +200,47 @@ class Intel:
             entry["ttl_days"] = DEFAULT_TTL_DAYS[kind]
             changed = True
         return entry
+
+    def _seed_config(self) -> None:
+        """把 config.yaml 的 ioc.ips/domains 一次性迁入闸门（接线，2026-11-19）。
+
+        以前 AEG-043 直接拿 cfg["ioc"] 明文比字符串、写死 critical；现在名单必须
+        作为 intel 条目进闸门，才有（a）CIDR 最长前缀、（b）allowlist 前置、
+        （c）衰减时钟。明文名单没有来源与首次观测时间 → 按 low 置信入闸门
+        （0.15 → medium），要 high/critical 必须走 Intel.add/情报导入并给置信度。
+        只补缺失键：已存在的条目不覆盖，避免每次重启把衰减时钟重置为 0。
+        """
+        icfg = self.cfg.get("ioc") if isinstance(self.cfg.get("ioc"), dict) else {}
+        now = time.time()
+        seeded = 0
+        for kind, field in (("ip", "ips"), ("domain", "domains")):
+            for raw in (icfg.get(field) or []):
+                value = str(raw or "").strip().lower()
+                if not value:
+                    continue
+                key = self._ip_key(value) if kind == "ip" else value
+                if not key or key in self.data[kind]:
+                    continue
+                # 保留/私网段写进 IOC 多半是配置笔误，不进闸门（进了也会被 allowlist 挡，但别污染统计）
+                if kind == "ip" and self.warnings.check_ip(key) is not None:
+                    continue
+                if kind == "domain" and self.warnings.check_domain(key) is not None:
+                    continue
+                self.data[kind][key] = {
+                    "value": key, "source": "config:ioc",
+                    "note": "config.yaml ioc 名单迁入（无来源元数据，按低置信计分）",
+                    "confidence": "low", "added": now,
+                    "first_seen": now, "last_seen": now,
+                    "ttl_days": DEFAULT_TTL_DAYS[kind],
+                }
+                seeded += 1
+        if seeded:
+            self._save()
+            try:
+                self.store.log_action("system", "intel:seed-config",
+                                      f"{seeded} 条 config ioc 迁入闸门", "ok")
+            except Exception:
+                pass
 
     def _migrate_save(self) -> None:
         """老格式升级：补字段后落盘一次（旧字段全保留，失败静默）。"""

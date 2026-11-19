@@ -13,6 +13,7 @@ from typing import List
 
 from .engine import Ctx, Rule, exe_of, root_pid
 from ..model import Event
+from ..intel import CONF_MAP, hit_counts, hit_severity, score_to_severity
 
 HOME = os.path.expanduser("~")
 _PW = "pa" + "ss" + "word"   # 拆写，避免模板占位符替换
@@ -231,15 +232,76 @@ rule(
     description="连接常见后门/C2 端口。",
 )
 
+def _ioc_allowlisted(intel, rip: str, raddr: str) -> bool:
+    """allowlist 前置：保留/共享基础设施（RFC1918、回环、CGNAT、Cloudflare…）永不算 IOC。"""
+    try:
+        if rip and intel.warnings.check_ip(rip) is not None:
+            return True
+        if raddr and intel.warnings.check_domain(raddr) is not None:
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _ioc_hit(ev: Event, c: Ctx) -> "dict | None":
+    """AEG-043 的闸门查表 —— 三处写死定级的其中一处就在原地把这里短路掉。
+
+    查表顺序固定：intel.match_ip（CIDR 最长前缀 + allowlist 前置）→ intel.match_domain；
+    命中但衰减到期（score=0）→ 视为不再计分，返回 None；
+    intel 不可用（独立引擎/单测）才退回 config 明文名单，且只给最低置信分档。
+    """
+    sub = ev.subject or {}
+    rip = str(sub.get("rip") or "")
+    raddr = str(sub.get("raddr") or "")
+    intel = getattr(c, "intel", None)
+    if intel is not None:
+        hit = None
+        try:
+            if rip:
+                hit = intel.match_ip(rip)
+            if hit is None and raddr:
+                hit = intel.match_domain(raddr)
+        except Exception:
+            hit = None
+        if hit is not None:
+            return hit if hit_counts(hit) else None
+        if _ioc_allowlisted(intel, rip, raddr):
+            return None
+    icfg = c.cfg.get("ioc") if isinstance(c.cfg.get("ioc"), dict) else {}
+    if (rip and rip in set(icfg.get("ips") or [])) or \
+            (raddr and raddr in set(icfg.get("domains") or [])):
+        # 明文名单没有来源/时间戳 → 只能按 low 置信进闸门分档（0.15 → medium）
+        return {"value": raddr or rip, "source": "config:ioc",
+                "score": CONF_MAP["low"], "severity": score_to_severity(CONF_MAP["low"]),
+                "lifecycle": "legacy-config"}
+    return None
+
+
+def _ioc_severity(ev: Event, c: Ctx) -> "str | None":
+    """AEG-043 定级：只认闸门算出来的 severity；不计分时返回 None（整条丢弃）。"""
+    hit = _ioc_hit(ev, c)
+    return hit_severity(hit, default="low") if hit else None
+
+
+def _ioc_detail(ev: Event, c: Ctx) -> str:
+    hit = _ioc_hit(ev, c) or {}
+    sub = ev.subject or {}
+    target = sub.get("raddr") or sub.get("rip")
+    return (f"命中情报库: {target}（来源 {hit.get('source') or '-'}"
+            f"，分数 {hit.get('score', '-')}，置信 {hit.get('confidence') or '-'}）")
+
+
 rule(
-    id="AEG-043", name="命中威胁情报 IOC", severity="critical",
-    when=lambda ev, c: ev.kind == "net.connect" and (
-        str(ev.subject.get("rip")) in set((c.cfg.get("ioc") or {}).get("ips") or [])
-        or str(ev.subject.get("raddr")) in set((c.cfg.get("ioc") or {}).get("domains") or [])),
-    detail=lambda ev, c: f"命中情报库: {ev.subject.get('raddr')}",
-    advice="IOC 命中即为高置信事件；按应急流程封禁并全网排查同源。",
+    id="AEG-043", name="命中威胁情报 IOC", severity="low",
+    when=lambda ev, c: ev.kind == "net.connect" and _ioc_hit(ev, c) is not None,
+    severity_fn=_ioc_severity,
+    detail=_ioc_detail,
+    advice="IOC 命中按闸门分档处置：critical/high 立即封禁并全网排查同源；"
+           "medium 先核对情报来源与业务归属（保留网段会被 allowlist 拦下）。",
     tags=("command_control",), mitre=("T1071",),
-    description="外联地址命中本地维护的 IOC 列表（config.yaml 的 ioc.ips/domains）。",
+    description="外联地址命中情报库（config.yaml ioc.ips/domains 会一次性迁入闸门）。"
+                "等级由 intel.py 按 CIDR 最长前缀 + allowlist + 置信度衰减计算，不再写死。",
 )
 
 rule(

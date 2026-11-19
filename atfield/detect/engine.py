@@ -69,6 +69,8 @@ class Ctx:
         self.cfg = cfg
         self._freq: Dict[str, collections.deque] = {}
         self._fired: Dict[str, float] = {}
+        # 情报闸门（可选）：由 Engine.attach_intel 注入，规则用它给 IOC 类命中定级
+        self.intel = None
 
     def freq(self, key: str, window: float, threshold: int) -> int:
         """维护滑动窗口，返回窗口内次数。"""
@@ -118,6 +120,10 @@ class Rule:
     cooldown: Optional[float] = None    # None = 按 tags 分级
     actor: Optional[Callable[[Event, Ctx], str]] = None
     enabled: bool = True
+    # 动态定级（2026-11-19 情报闸门接线）：给了它就以它的返回值为最终等级，
+    # 且不再与 ev.severity 取 max —— 否则事件自带的 high 会把保留网段的 IOC 抬回去。
+    # 返回 None/异常时退回下面的 severity 静态值。
+    severity_fn: Optional[Callable[[Event, Ctx], Optional[str]]] = None
     description: str = ""
 
 
@@ -467,11 +473,13 @@ class Engine:
 
                 f = Finding(
                     rule_id=rule.id, name=rule.name,
-                    severity=sev_max(rule.severity, ev.severity),
+                    severity=self._severity(rule, ev),
                     event=ev, actor=actor, tags=list(rule.tags),
                     mitre=list(rule.mitre), detail=detail,
                     advice=rule.advice, ts=ev.ts,
                 )
+                if not f.severity:
+                    continue
                 if self.admit(f, ev, cooldown_for(rule)):
                     out.append(f)
         self.save_dedup()
@@ -479,10 +487,32 @@ class Engine:
             self.save_suppress()
         return out
 
+    def _severity(self, rule: Rule, ev: Event) -> str:
+        """一条规则对一条事件的最终等级。
+
+        有 severity_fn（情报闸门类规则）→ 以闸门结果为准，不与 ev.severity 取 max：
+        事件自带的 high（如公网直连）不能把保留网段的 IOC 抬成 high/critical。
+        返回 None/空 = 闸门判定「不再计分」，调用方跳过该条。
+        """
+        if rule.severity_fn is not None:
+            try:
+                sev = rule.severity_fn(ev, self.ctx)
+            except Exception:
+                sev = None
+            return str(sev) if sev in ("info", "low", "medium", "high", "critical") else ""
+        return sev_max(rule.severity, ev.severity)
+
+    def attach_intel(self, intel) -> None:
+        """把情报闸门注入规则上下文（core 在 Intel 构造后调用）。"""
+        self.intel = intel
+        if self.ctx is not None:
+            self.ctx.intel = intel
+
     def catalog(self) -> List[dict]:
         return [{
             "id": r.id, "name": r.name, "severity": r.severity,
             "tags": list(r.tags), "mitre": list(r.mitre),
             "advice": r.advice, "description": r.description,
             "cooldown": cooldown_for(r),
+            "dynamic_severity": r.severity_fn is not None,
         } for r in self.rules]

@@ -20,7 +20,7 @@ from .canary import Canary
 from .detect import Correlator, Engine
 from .detect.engine import cooldown_for_tags
 from .detect import rules_builtin
-from .intel import Intel
+from .intel import Intel, grade_event_severity
 from .inventory import Inventory
 from .model import Event, Finding, iso
 from .netintel import NetIntel
@@ -35,7 +35,7 @@ FUSION_MAP = {
                     ["canary", "honeypot"], ["T1078", "T1005"]),
     "ndr.beaconing": ("NDR-BEACON", "疑似 C2 心跳（连接间隔高度规律）", "high",
                       ["command_control"], ["T1071", "T1571"]),
-    "ndr.ioc_ip": ("TI-IOC-IP", "外联命中威胁情报库 IP", "high",
+    "ndr.ioc_ip": ("TI-IOC-IP", "外联命中威胁情报库 IP", "low",
                    ["command_control", "threat_intel"], ["T1071"]),
     "ndr.risky_domain": ("NDR-RISKY-DOMAIN", "外联动态 DNS / 隧道类域名", "medium",
                          ["command_control"], ["T1568", "T1071"]),
@@ -56,6 +56,10 @@ FUSION_MAP = {
     "ueba.rare_activity": ("UEBA-RARE-ACT", "时段/组合频率异常（低频行为活跃）", "medium",
                            ["ueba", "execution"], ["T1204"]),
 }
+
+# 融合层里「等级必须来自情报闸门」的信号：表里的等级只是 fallback，
+# 真正定级在 _fusion_findings 里按 intel.py 重新计算（allowlist 前置 + 衰减）。
+GATED_FUSION_KINDS = {"ndr.ioc_ip"}
 
 
 def _fusion_advice(rule_id: str) -> str:
@@ -105,6 +109,9 @@ class Core:
         self.firewall = firewall_mod.Firewall(cfg, self.store)
         # ---- 检测与响应：UEBA / NDR / 诱饵 / 情报 / SOAR / 资产 / 合规 ----
         self.intel = Intel(cfg, self.store)
+        # 情报闸门接线：规则层（AEG-043）的 Ctx 必须能查 intel，
+        # 否则 severity 又会退化成写死值。
+        self.engine.attach_intel(self.intel)
         self.ueba = UEBA(cfg, self.store)
         self.netintel = NetIntel(cfg, self.store, self.intel)
         self.canary = Canary(cfg, self.store)
@@ -316,6 +323,10 @@ class Core:
             if not spec:
                 continue
             rid, name, sev, tags, mitre = spec
+            # 情报闸门（2026-11-19 接线）：情报类融合信号的等级不写死在表里，
+            # 按 intel.py 的 CIDR 最长前缀 + allowlist 前置 + 置信度衰减重新定级。
+            if ev.kind in GATED_FUSION_KINDS:
+                sev = grade_event_severity(ev, self.intel, fallback=sev)
             # 个别信号自带更精确的等级（如诱饵「被读取」与「被改写」风险不同）
             if ev.kind == "canary.trip" and ev.severity:
                 sev = ev.severity if ev.severity in ("low", "medium", "high", "critical") else sev
