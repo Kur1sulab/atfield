@@ -1,7 +1,7 @@
 /* ============================================================================
    心之壁 · 设计令牌与主题
    规则：结构 token 与颜色 token 分离；组件样式里禁止出现字面色值。
-        三套主题只覆盖颜色变量：纸白（默认，浅色）/ 石墨 / 暖墨。
+        三套主题只覆盖颜色变量：石墨（默认，深色）/ 暖墨 / 纸白（浅色，可切换）。
         所有文字类 token 均经 WCAG 对比度实测（取色基数见 docs 取色表）。
    ========================================================================== */
 
@@ -21,6 +21,10 @@
   --fz-xs: 11px;
   --sidebar-w: 234px;
   --topbar-h: 60px;
+  /* 主题预览圆点的固定色（代表「那套主题」的强调色，与当前主题无关） */
+  --sw-dark: #5aa9ff;
+  --sw-dusk: #c2451f;
+  --sw-light: #ffffff;
 
   /* 语义别名 —— 兼容既有组件类名，指向当前主题的对应色 */
   --mint: var(--accent);
@@ -59,6 +63,7 @@
   --glass-hi: rgba(255, 255, 255, 0.06);
   --glass-lo: rgba(0, 0, 0, 0.34);
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  --on-accent: #ffffff;   /* 实心强调色按钮上的文字色（白字 5.14:1） */
 }
 
 /* ---- 主题二：暖墨（投影/截图更耐看） ---------------------------------- */
@@ -87,9 +92,10 @@
   --glass-hi: rgba(255, 240, 228, 0.07);
   --glass-lo: rgba(0, 0, 0, 0.3);
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.46);
+  --on-accent: #ffffff;   /* 白字 5.04:1 */
 }
 
-/* ---- 主题三：纸白（默认 · 浅色，白底白卡） ---------------------------- */
+/* ---- 主题三：纸白（浅色，可切换 · 平白底白卡） ------------------------ */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f7f8fa;            /* 近白中性底，不带暖调 */
@@ -114,9 +120,10 @@
 
   --glass-hi: rgba(255, 255, 255, 0.95);
   --glass-lo: rgba(16, 24, 40, 0.04);
-  --login-glow: none;   /* 浅色下不要人造蓝色光斑 */
+  --login-glow: none;   /* 登录页不要人造光斑：背景就是纯深色 */
   --login-veil: 100%;   /* 浅色登录页纯平白底：不透过底层卡片，不留灰色方块/光斑 */
   --shadow: 0 10px 30px rgba(16, 24, 40, 0.09);
+  --on-accent: #ffffff;   /* 白字 5.80:1 */
 }
 
 /* 派生色：用 color-mix 从主题色推导，切换主题自动跟随 */
@@ -128,7 +135,8 @@
   --accent-line: color-mix(in srgb, var(--accent) 42%, transparent);
   --track: color-mix(in srgb, var(--text) 8%, transparent);
   --gauge-track: color-mix(in srgb, var(--text) 10%, transparent);
-  --login-glow: radial-gradient(1200px 600px at 50% -10%, var(--accent-weak), transparent 70%);
+  /* 禁人造光斑/渐变背景装饰：登录页背景 = 纯深色 + 真实毛玻璃景深 */
+  --login-glow: none;
   --login-veil: 88%;
 }
 
@@ -146,7 +154,7 @@ body {
 }
 
 /* 滚动条交给系统叠加式样式：backdrop-filter 容器里自绘滚动条会出白方块 */
-* { scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 
 ::selection { background: var(--accent-weak); color: var(--text); }
 
@@ -178,9 +186,9 @@ body {
   border-radius: var(--r-sm);
   display: grid; place-items: center;
   background: var(--accent-fill);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700; font-size: 15px; letter-spacing: 0.5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--on-accent) 24%, transparent);
 }
 
 .brand-txt { min-width: 0; }
@@ -204,12 +212,8 @@ nav {
   padding: 2px 0 6px;
   scrollbar-gutter: stable;
 }
-nav::-webkit-scrollbar { width: 8px; }
-nav::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
-  border-radius: 4px; border: 2px solid transparent; background-clip: padding-box;
-}
-nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 28%, transparent); background-clip: padding-box; }
+/* 不自绘 ::-webkit-scrollbar：侧栏是 backdrop-filter 容器，Chromium 会画成白方块；
+   统一走全局 scrollbar-width: thin + scrollbar-color */
 
 
 .nav-item {
@@ -285,12 +289,7 @@ nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 
   max-height: 96px;
   overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-hi) transparent;
-}
-.mini-list::-webkit-scrollbar { width: 7px; }
-.mini-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 14%, transparent);
-  border-radius: 4px; border: 2px solid transparent; background-clip: padding-box;
+  scrollbar-color: var(--line) transparent;
 }
 
 /* 矮屏优先保证主菜单完整可见：先压矮采集器明细，再在矮屏整段收起，最后收紧行距
@@ -337,9 +336,9 @@ nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 
   transition: border-color var(--dur) ease;
 }
 .theme-sw .tsw i { width: 12px; height: 12px; border-radius: 50%; display: block; }
-.theme-sw .tsw[data-theme="dark"] i { background: #5aa9ff; }
-.theme-sw .tsw[data-theme="dusk"] i { background: #c2451f; }
-.theme-sw .tsw[data-theme="light"] i { background: #fff; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
+.theme-sw .tsw[data-theme="dark"] i { background: var(--sw-dark); }
+.theme-sw .tsw[data-theme="dusk"] i { background: var(--sw-dusk); }
+.theme-sw .tsw[data-theme="light"] i { background: var(--sw-light); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
 .theme-sw .tsw.on {
   border-color: var(--accent-line);
   background: var(--accent-weak);
@@ -409,10 +408,10 @@ nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 
 .btn.mint, .btn.primary {
   background: var(--accent-fill);
   border-color: var(--accent-fill);
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: var(--on-accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--on-accent) 20%, transparent);
 }
-.btn.mint:hover, .btn.primary:hover { filter: brightness(1.07); background: var(--accent-fill); color: #fff; }
+.btn.mint:hover, .btn.primary:hover { filter: brightness(1.07); background: var(--accent-fill); color: var(--on-accent); }
 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .btn.danger:hover { background: color-mix(in srgb, var(--bad) 17%, transparent); }
 .btn.sm { padding: 6px 10px; font-size: 12px; }
@@ -471,13 +470,8 @@ nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 
 .gov-col { display: flex; flex-direction: column; min-width: 0; }
 /* 列表型卡片限高内滚：一屏里塞 20 条告警会把右列拉到 700px，整页重心全偏 */
 .scroll-list { max-height: 452px; overflow-y: auto; overscroll-behavior: contain; }
-.scroll-list::-webkit-scrollbar { width: 7px; }
-.scroll-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 14%, transparent);
-  border-radius: 4px; border: 2px solid transparent; background-clip: padding-box;
-}
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); align-items: start; }
-.grid-2e { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+.grid-2e { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); align-items: start; }
 
 /* ============================== 姿态环 ============================== */
 .posture-body { display: flex; gap: 18px; padding: 16px; align-items: center; }
@@ -552,7 +546,8 @@ nav::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 
 .empty { padding: 34px 16px; text-align: center; color: var(--faint); font-size: 12.5px; }
 
 /* ============================== 表格 ============================== */
-.table-wrap { overflow-x: auto; }
+/* 列表型表格限高内滚（300 行告警不撑爆整页）；表头 sticky 已有 */
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 560px; overscroll-behavior: contain; }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 thead th {
   position: sticky; top: 0; z-index: 1;
@@ -569,11 +564,11 @@ tbody td { padding: 6px 12px; border-bottom: 1px solid var(--line); color: var(-
 tbody td:first-child { color: var(--text); }
 tbody tr:hover td { background: var(--hover); }
 tbody tr:last-child td { border-bottom: 0; }
-td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+td.mono, .mono { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 td.nowrap { white-space: nowrap; }
 
 /* 长 token 截断 + title 兜底，禁止撑破布局 */
-.clip { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+.clip { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; overflow-wrap: anywhere; }
 .t { color: var(--text); }
 
 /* ============================== 等级 / 状态 ============================== */
@@ -788,7 +783,7 @@ pre.out {
   min-width: 158px; padding: 5px;
   background: var(--panel-hi); border: 1px solid var(--line-hi);
   border-radius: var(--r-sm);
-  box-shadow: 0 12px 28px rgba(16, 24, 40, .16);
+  box-shadow: var(--shadow);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
@@ -984,9 +979,9 @@ pre.gov-md { max-height: 380px; }
 .wall-field.is-solid .wall-field-cap { color: var(--ok); }
 @keyframes wf-spin { to { transform: rotate(360deg); } }
 @keyframes wf-flash {
-  0% { box-shadow: 0 0 0 0 rgba(0,0,0,0); background: transparent; }
+  0% { box-shadow: 0 0 0 0 transparent; background: transparent; }
   12% { background: color-mix(in srgb, var(--accent) 9%, transparent); }
-  100% { box-shadow: 0 0 0 14px rgba(0,0,0,0); background: transparent; }
+  100% { box-shadow: 0 0 0 14px transparent; background: transparent; }
 }
 .wall-item.wf-flash { animation: wf-flash 2.4s ease-out; border-radius: 8px; }
 @keyframes wf-breathe { 0%, 100% { transform: scale(1); opacity: .45; } 50% { transform: scale(1.045); opacity: 1; } }
@@ -1002,10 +997,10 @@ pre.gov-md { max-height: 380px; }
 
 /* ---------- 主机防火墙（响应页）---------- */
 .fw-state { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.fw-state b { font: 600 13px/1.4 var(--sans, inherit); }
+.fw-state b { font: 600 13px/1.4 var(--font); }
 .fw-lamp {
   width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
-  background: var(--muted); box-shadow: 0 0 0 3px rgba(0,0,0,.05);
+  background: var(--muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 5%, transparent);
 }
 .fw-lamp.on   { background: var(--ok); }
 .fw-lamp.warn { background: var(--warn); }

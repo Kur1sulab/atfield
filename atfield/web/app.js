@@ -13,7 +13,24 @@ const CN = {
   tl: { event: '事件', finding: '告警', incident: '攻击链', action: '处置', ticket: '工单' },
   cat: { remote: '远程控制', browser: '浏览器', dev: '开发工具', security: '安全软件', vpn: '网络代理', other: '其他' },
   conf: { low: '低', medium: '中', high: '高' },
+  col: { process: '进程', network: '网络', session: '会话', persistence: '常驻项', integrity: '完整性', baseline: '安全基线', logstream: '统一日志流', privileged: '特权增强', authlog: '认证日志', securitysw: '安全组件', shellhist: '命令历史' },
+  act: { pending: '待确认', terminate: '终止进程', suspend: '挂起进程', resume: '恢复进程', block: '封禁地址', export: '导出证据', suspend_process: '挂起进程', block_ip: '封禁地址', export_evidence: '导出证据', ticket: '开工单', isolate: '隔离主机', kill: '终止进程' },
+  tag: { persistence: '持久化', execution: '执行', command_control: '命令控制', credential_access: '凭据访问', defense_evasion: '防御规避', discovery: '探测', lateral_movement: '横向移动', collection: '收集', exfiltration: '数据外传', impact: '破坏', fileless: '无文件', exposure: '暴露面', integrity: '完整性', ueba: '行为偏离', privilege_escalation: '提权', initial_access: '初始入口' },
+  ndr: { direct_ip: '直连公网 IP', beaconing: '规律心跳', new_domain: '新域名', dga: '随机域名', tunnel: '疑似隧道', high_risk_tld: '高危后缀' },
+  ikind: { ip: 'IP', domain: '域名', hash: '哈希' },
+  mode: { poll: '轮询', stream: '流式' },
+  auditAct: { 'auth.login': '登录', 'auth.logout': '退出登录', 'auth.passwd': '修改口令', 'api/respond': '处置动作', 'users.add': '新增账号', 'users.delete': '删除账号', 'users.role': '修改角色', 'users.passwd': '修改口令', 'updates.apply': '应用更新', 'updates.rollback': '回滚更新', 'updates.reset': '解除熔断', 'rules.reload': '重载规则', 'intel.add': '新增情报', 'intel.import': '导入情报', 'intel.remove': '移除情报', 'suppress.add': '添加抑制', 'suppress.remove': '撤销抑制', 'ticket.new': '新建工单', 'ticket.update': '更新工单', 'canary.deploy': '部署诱饵', 'canary.undeploy': '移除诱饵', 'ueba.reset': '重置基线', 'firewall.block': '防火墙阻断', 'firewall.unblock': '防火墙解封', 'playbook.confirm': '确认剧本', 'playbook.reject': '驳回剧本', 'compliance.rebuild': '重建合规矩阵', 'inventory.scan': '资产扫描', 'selftest': '自检' },
 };
+/* 枚举一律过中文映射：界面不允许泄漏英文 severity/status/tag/action */
+const tagsCn = (tags, sep) => (tags || []).map(t => CN.tag[t] || t).join(sep);
+const actsCn = (acts, sep) => (acts || []).map(a => CN.act[a] || a).join(sep);
+function whenCn(w) {
+  w = w || {};
+  const parts = [];
+  if ((w.severity || []).length) parts.push('等级∈{' + w.severity.map(x => CN.sev[x] || x).join('，') + '}');
+  if ((w.tags || []).length) parts.push('标签∈{' + tagsCn(w.tags, '，') + '}');
+  return parts.join(' · ') || '无条件';
+}
 
 const S = {
   view: 'overview',
@@ -110,7 +127,7 @@ function kpi(label, val, sub, color, barPct) {
     <div class="kpi-label">${esc(label)}</div>
     <div class="kpi-val" style="color:${color || 'var(--text)'}">${val}</div>
     <div class="kpi-sub">${sub || ''}</div>
-    ${barPct == null ? '' : `<div class="kpi-bar"><i style="width:${Math.max(2, Math.min(100, barPct))}%;background:${color || 'var(--mint)'}"></i></div>`}
+    ${barPct == null ? '' : `<div class="kpi-bar"><i style="width:${Math.max(2, Math.min(100, barPct))}%;background:var(--accent)"></i></div>`}
   </div>`;
 }
 function donut(score, grade) {
@@ -148,7 +165,7 @@ function renderChrome(o) {
   $('#meta').textContent = `${o.platform || ''} · ${o.user || ''} · 已运行 ${Math.floor((o.uptime || 0) / 60)} 分钟 · ${o.now || ''}`;
   const h = o.health || {}, t = o.threat || {};
   const hp = $('#pill-health');
-  hp.className = 'pill lv-' + (h.health >= 85 ? 'calm' : h.health >= 65 ? 'medium' : 'critical');
+  hp.className = 'pill lv-' + (h.health >= 65 ? 'calm' : 'critical');
   hp.textContent = `健康度 ${Number(h.health || 0).toFixed(0)} · ${h.grade || '—'}`;
   const tp = $('#pill-threat');
   tp.className = 'pill lv-' + (o.threat_color || 'calm');
@@ -167,8 +184,8 @@ function renderChrome(o) {
       .filter(Boolean).join(' · ');
     return `<div class="mini-row" title="${esc(tip)}">
       <span class="sq ${cls}"></span>
-      <span class="nm">${esc(c.name)}</span>
-      <span class="count-hint">${c.available ? 'ok' : 'n/a'}</span>
+      <span class="nm">${esc(CN.col[c.name] || c.name)}</span>
+      <span class="count-hint">${c.available ? '正常' : '不可用'}</span>
     </div>`;
   }).join('') || '<div class="empty">无采集器</div>';
 
@@ -177,7 +194,7 @@ function renderChrome(o) {
   if (st) st.textContent = `采集器状态 · ${coll.length} 路`;
 
   const f = o.fusion || {};
-  $('#b-findings').textContent = num((o.top_findings || []).length);
+  $('#b-findings').textContent = String((o.threat || {}).findings_total || (o.top_findings || []).length || '');
   $('#b-ndr').textContent = num((f.ndr || {}).beacon_count || 0);
   $('#b-canary').textContent = num((f.canary || {}).trips || 0);
   $('#b-pending').textContent = num(((f.playbooks || {}).pending || []).length);
@@ -216,13 +233,13 @@ function viewOverview() {
   </div>
 
   <div class="grid-3">
-    ${panel('行为基线 UEBA', miniRows([
+    ${panel('行为基线速览', miniRows([
       ['已知进程名', num((f.ueba || {}).known_processes || 0)],
       ['已知可执行路径', num((f.ueba || {}).known_exe || 0)],
       ['已知外联地址', num((f.ueba || {}).known_remote || 0)],
       ['状态', (f.ueba || {}).learning ? '学习中' : '已建立基线'],
     ]), { tag: '偏离即告警' })}
-    ${panel('网络检测 NDR', miniRows([
+    ${panel('网络检测速览', miniRows([
       ['观测目的地', num((f.ndr || {}).destinations || 0)],
       ['未解析域名', num((f.ndr || {}).unresolved || 0)],
       ['疑似信标', num(beacons)],
@@ -246,13 +263,13 @@ function viewOverview() {
   </div>
 
   <div class="grid-3">
-    ${panel('资产与软件', miniRows([
+    ${panel('资产软件速览', miniRows([
       ['已登记应用', num(inv.apps || 0)],
       ['长期未更新', num(inv.stale_count || 0)],
       ['签名异常', num(inv.unsigned_count || 0)],
       ['远程控制类', num((inv.remote || []).length)],
     ]), { actions: `<button class="btn sm" data-goto="inventory">明细</button>` })}
-    ${panel('合规矩阵', miniRows([
+    ${panel('合规速览', miniRows([
       ['CIS 得分', `${Number(cis.score || 0).toFixed(0)} / 100`],
       ['CIS 不合格', num(cis.fail || 0)],
       ['等保三级得分', `${Number(dj.score || 0).toFixed(0)} / 100`],
@@ -312,7 +329,7 @@ async function viewFindings() {
     esc(f.name || ''),
     clip(f.actor, 22),
     clip(f.detail || '', 90),
-    `<span class="mono">${esc((f.tags || []).join(','))}</span>`,
+    `<span class="mono">${esc(tagsCn(f.tags, ','))}</span>`,
   ]);
   return `
   <div class="filters">
@@ -400,7 +417,7 @@ async function viewTelemetry() {
   const cronRows = (pe.cron || []).map(r => [`<span class="mono">${clip(r.line, 110)}</span>`]);
   const igRows = (ig.files || []).map(r => [
     clip(r.path, 70), r.exists ? '存在' : '<span class="sev sev-high">缺失</span>',
-    `<span class="mono">${esc(r.digest || '')}</span>`, r.readable ? '' : '<span class="sev sev-low">不可读</span>',
+    `${clip(r.digest || '—', 16)}`, r.readable ? '' : '<span class="sev sev-low">不可读</span>',
   ]);
   const swRows = (sw.items || []).map(r => [
     esc(r.label || ''), r.present ? '<span class="st st-pass">已安装</span>' : '<span class="st st-unknown">未检测到</span>',
@@ -455,8 +472,9 @@ function bindTabs() {
 async function viewUEBA() {
   const d = await API('/api/ueba');
   const s = d.status || {};
-  const max = Math.max(1, ...(d.hourly || []).map(h => h.count));
-  const bars = (d.hourly || []).map(h => `<div class="bar" style="height:${Math.max(2, (h.count / max) * 100)}%" title="${h.hour}:00 · ${h.count} 次观测"></div>`).join('');
+  const hourly = d.hourly || [];
+  const max = Math.max(1, ...hourly.map(h => h.count));
+  const bars = hourly.map(h => `<div class="bar" style="height:${Math.max(2, (h.count / max) * 100)}%" title="${h.hour}:00 · ${h.count} 次观测"></div>`).join('');
   return `
   <div class="kpis">
     ${kpi('学习状态', s.learning ? '学习中' : '已建立基线', `已观测 ${num(s.samples || 0)} 次 · ${num(s.learn_elapsed || 0)} 秒`, 'var(--mint)')}
@@ -464,12 +482,12 @@ async function viewUEBA() {
     ${kpi('已知可执行路径', num(s.known_exe || 0), '路径级基线', 'var(--blue)')}
     ${kpi('已知外联地址', num(s.known_remote || 0), '新目的地即记录', 'var(--orange)')}
   </div>
-  ${panel('24 小时活动分布', `<div class="bars">${bars}</div>
+  ${panel('24 小时活动分布', `${hourly.length ? `<div class="bars">${bars}</div>` : '<div class="empty">近 24 小时无外联记录</div>'}
     <div class="act-desc" style="margin-top:8px">低活跃时段（00:00-06:00）首次出现的非系统路径进程会被自动提升告警等级。</div>`,
     { actions: `<button class="btn sm danger" data-act="ueba-reset">重置基线</button>`, tag: `画像文件 ${s.path || ''}` })}
   <div class="grid-2">
-    ${panel('已知进程（前 200）', `<div class="mini">${(d.top_processes || []).map(p => `<div class="mini-row"><span class="nm mono">${esc(p)}</span></div>`).join('') || '<div class="empty">暂无</div>'}</div>`)}
-    ${panel('最近外联目的地', `<div class="mini">${(d.recent_destinations || []).map(ip => `<div class="mini-row"><span class="nm mono">${esc(ip)}</span></div>`).join('') || '<div class="empty">暂无外联记录</div>'}</div>`)}
+    ${panel('已知进程（前 200）', `<div class="scroll-list"><div class="mini">${(d.top_processes || []).map(p => `<div class="mini-row"><span class="nm mono">${esc(p)}</span></div>`).join('') || '<div class="empty">暂无</div>'}</div></div>`)}
+    ${panel('最近外联目的地', `<div class="scroll-list"><div class="mini">${(d.recent_destinations || []).map(ip => `<div class="mini-row"><span class="nm mono">${esc(ip)}</span></div>`).join('') || '<div class="empty">暂无外联记录</div>'}</div></div>`)}
   </div>`;
 }
 
@@ -483,7 +501,7 @@ async function viewNDR() {
   ]);
   const fRows = (d.flags || []).map(f => [
     `<span class="mono">${esc(tsStr(f.ts))}</span>`, sev(f.severity),
-    `<span class="mono">${esc(f.kind)}</span>`, esc(f.process || ''), clip(f.text, 96),
+    `<span class="mono">${esc(CN.ndr[f.kind] || f.kind)}</span>`, esc(f.process || ''), clip(f.text, 96),
   ]);
   const dRows = (d.top_destinations || []).map(x => [
     `<span class="mono">${esc(x.ip)}</span>`, esc(x.hostname || '未解析'),
@@ -543,7 +561,7 @@ async function viewIntel() {
   const d = await API('/api/intel');
   const s = d.stats || {};
   const rows = (d.items || []).slice(0, 300).map(i => [
-    `<span class="mono">${esc(i.kind)}</span>`, `<span class="mono">${esc(i.value)}</span>`,
+    `<span class="mono">${esc(CN.ikind[i.kind] || i.kind)}</span>`, clip(i.value, 16),
     esc(CN.conf[i.confidence] || i.confidence || ''), esc(i.source || ''),
     clip(i.note || '', 60),
     `<button class="btn sm danger" data-act="intel-del" data-kind="${esc(i.kind)}" data-value="${esc(i.value)}">移除</button>`,
@@ -578,8 +596,8 @@ async function viewPlaybooks() {
   const d = await API('/api/playbooks');
   const pbRows = (d.items || []).map(p => [
     `<span class="mono">${esc(p.id)}</span>`, esc(p.name || ''),
-    `<span class="mono">${esc(JSON.stringify(p.when || {}))}</span>`,
-    `<span class="mono">${esc((p.actions || []).join(' → '))}</span>`,
+    `${esc(whenCn(p.when))}`,
+    `<span class="mono">${esc(actsCn(p.actions, ' → '))}</span>`,
     p.require_confirm ? '<span class="sev sev-medium">需确认</span>' : '<span class="st st-pass">自动</span>',
     p.enabled ? '启用' : '<span class="st st-unknown">停用</span>',
   ]);
@@ -599,7 +617,7 @@ async function viewPlaybooks() {
   const histRows = (d.history || []).slice().reverse().slice(0, 60).map(r => [
     `<span class="mono">${esc(r.time || tsStr(r.ts))}</span>`, esc(r.playbook || ''), esc(r.name || ''),
     esc(r.incident || ''), `<span class="st st-${r.status === 'done' ? 'pass' : r.status === 'rejected' ? 'unknown' : 'warn'}">${esc(CN.pb[r.status] || r.status)}</span>`,
-    clip((r.results || []).map(x => `${x.action}:${x.ok ? '成功' : '失败'}`).join('，'), 70),
+    clip((r.results || []).map(x => `${CN.act[x.action] || x.action}:${x.ok ? '成功' : '失败'}`).join('，'), 70),
   ]);
   return `
   ${panel('待确认动作', pending ? `<div class="chain-list">${pending}</div>` : '<div class="empty">没有待确认的处置动作</div>', {
@@ -749,7 +767,7 @@ async function viewResponse() {
     API('/api/firewall').catch(() => ({})),
   ]);
   const rows = (acts.actions || []).slice().reverse().slice(0, 120).map(a => [
-    `<span class="mono">${esc(tsStr(a.ts))}</span>`, esc(a.actor || ''), esc(a.action || ''),
+    `<span class="mono">${esc(tsStr(a.ts))}</span>`, esc(a.actor || ''), esc(CN.act[a.action] || a.action || ''),
     clip(a.target || '', 40), clip(a.result || '', 50),
   ]);
   const sale = S.cache.selftest;
@@ -822,7 +840,7 @@ async function viewResponse() {
 function viewCollectors() {
   const o = S.o || {}, coll = o.collectors || [];
   const rows = coll.map(c => [
-    esc(c.name || ''), esc(c.mode || ''), `<span class="mono">${esc(c.interval == null ? '—' : c.interval + 's')}</span>`,
+    esc(CN.col[c.name] || c.name || ''), esc(CN.mode[c.mode] || c.mode || ''), `<span class="mono">${esc(c.interval == null ? '—' : c.interval + 's')}</span>`,
     c.enabled ? '<span class="st st-pass">启用</span>' : '<span class="st st-unknown">停用</span>',
     c.available ? '<span class="st st-pass">可用</span>' : '<span class="st st-fail">不可用</span>',
     num(c.runs || 0), num(c.errors || 0),
@@ -962,7 +980,7 @@ async function viewGovernance() {
   </div>`;
 
   const chain = `
-    <div class="gov-line"><span>链头哈希</span><code class="hk">${esc((a.stats || {}).head || '—')}</code></div>
+    <div class="gov-line"><span>链头哈希</span><code class="hk" title="${esc((a.stats || {}).head || '')}">${esc(String((a.stats || {}).head || '—').slice(0, 16))}${String((a.stats || {}).head || '').length > 16 ? '…' : ''}</code></div>
     <div class="gov-line"><span>保留策略</span><b>${num(au.retain_days || 0)} 天 / ${num(Math.round(au.retain_total_mb || 0))} MB</b></div>
     <div class="gov-line"><span>HMAC 锚点</span><b>${esc((a.anchor || {}).hash ? '已签名 ' + String((a.anchor || {}).hash).slice(0, 12) + '…' : '尚未生成')}</b></div>
     ${vr ? `<div class="gov-verdict ${vr.ok ? 'ok' : 'bad'}">
@@ -978,8 +996,8 @@ async function viewGovernance() {
     [{ t: '时间' }, { t: '动作' }, { t: '操作者' }, { t: '目标', c: 'clip-cell' }, { t: '结果' }, { t: '哈希' }],
     recs.map(r => [
       esc(r.ts_cn || tsStr(r.ts)),
-      `<b>${esc(r.action || '')}</b>`,
-      `${esc(r.actor || '')}<span class="muted"> / ${esc(r.role || '')}</span>`,
+      `<b>${esc(CN.auditAct[r.action] || r.action || '')}</b>`,
+      `${esc(r.actor || '')}<span class="muted"> / ${esc(ROLE_CN[r.role] || r.role || '')}</span>`,
       clip(r.target || '—', 42),
       ({ ok: '<span class="st st-pass">成功</span>',
          deny: '<span class="sev sev-high">拒绝</span>',
@@ -993,7 +1011,7 @@ async function viewGovernance() {
     <div class="gov-line"><span>当前版本</span><b>${esc(up.current_version || '—')}</b></div>
     <div class="gov-line"><span>已安装</span><b>${esc(up.installed_version || '—')} ${esc(up.installed_cn || '')}</b></div>
     <div class="gov-line"><span>最近可用（LKG）</span><b>${esc(up.lkg_version || '无')}</b></div>
-    <div class="gov-line"><span>签名校验</span><b>${up.require_signature ? '强制' : '关闭'} · 指纹 ${esc(up.key_fingerprint || '—')}</b></div>
+    <div class="gov-line"><span>签名校验</span><b>${up.require_signature ? '强制' : '关闭'} · 指纹 ${clip(up.key_fingerprint || '—', 16)}</b></div>
     <div class="gov-line"><span>受管目录</span><b>${(up.roots || []).map(esc).join(' / ') || '—'}</b></div>
     <div class="gov-line"><span>熔断器</span><b style="color:${govRowColor(!br.open)}">${br.open
       ? `已打开（连续失败 ${num(br.fail_count || 0)} 次，冷却 ${Math.round((br.seconds_left || 0) / 60)} 分）`
@@ -1050,7 +1068,7 @@ async function viewGovernance() {
   return `${kpis}
     <div class="grid-2">
       <div class="gov-col">
-        ${panel('审计链完整性', chain, { tag: 'append-only', tagCls: 'mint' })}
+        ${panel('审计链完整性', chain, { tag: '只增不删', tagCls: 'mint' })}
         ${panel('外部规则包', packsHtml, { tag: `${num(packs.length)} 个包` })}
       </div>
       ${panel('更新通道与回滚', upd, { tag: '签名 + 健康探针', tagCls: 'mint' })}
@@ -1526,7 +1544,7 @@ function connectSSE() {
 /* ---------------- 主题与版本 ---------------- */
 const THEMES = ['dark', 'dusk', 'light'];
 function applyTheme(name) {
-  const t = THEMES.indexOf(name) >= 0 ? name : 'light';
+  const t = THEMES.indexOf(name) >= 0 ? name : 'dark';
   document.documentElement.setAttribute('data-theme', t);
   try { localStorage.setItem('atfield.theme', t); } catch (e) { /* 隐私模式忽略 */ }
   $$('#theme-sw .tsw').forEach(b => b.classList.toggle('on', b.dataset.theme === t));
@@ -1534,7 +1552,7 @@ function applyTheme(name) {
 function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem('atfield.theme'); } catch (e) {}
-  applyTheme(saved || 'light');
+  applyTheme(saved || 'dark');
   const sw = $('#theme-sw');
   if (sw) sw.addEventListener('click', e => {
     const b = e.target.closest('.tsw');
