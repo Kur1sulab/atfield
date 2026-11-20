@@ -1,3 +1,10 @@
+//go:build darwin
+
+// 本文件测的是 darwin 专属的 parsePS（`ps -ww -axo ... command=` 的解析）。
+// 没有这行 build tag 时，`GOOS=linux go test ./...` / windows 会直接编译失败
+// （undefined: parsePS）——跨平台 CI 一跑就红。加 tag 后，非 darwin 平台跳过
+// 这几条用例，其余用例照跑。
+
 package collector
 
 import "testing"

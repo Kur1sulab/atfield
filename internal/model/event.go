@@ -83,6 +83,16 @@ type Finding struct {
 	Subject     map[string]any `json:"subject,omitempty"`
 	Tags        []string       `json:"tags,omitempty"`
 	VerifyState string         `json:"verify_state,omitempty"`
+
+	// 以下字段与 Python model.Finding 对齐（detect 层输出需要）：
+	// Actor 是归属键（根进程 pid / 主机），Detail 是首见描述，
+	// MITRE 是技术编号，EventID/TS 指回触发事件。
+	Actor   string   `json:"actor,omitempty"`
+	Detail  string   `json:"detail,omitempty"`
+	Advice  string   `json:"advice,omitempty"`
+	MITRE   []string `json:"mitre,omitempty"`
+	EventID string   `json:"event_id,omitempty"`
+	TS      float64  `json:"ts,omitempty"`
 }
 
 // Incident 由多条 Finding 关联出来的事件（攻击链）。

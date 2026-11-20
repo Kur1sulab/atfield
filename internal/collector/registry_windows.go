@@ -13,8 +13,9 @@ package collector
 //
 // 迁移进度：
 //   ✅ process      —— tasklist（首版无 PPID/命令行，见文件内说明）
-//   ⬜ network      —— GetExtendedTcpTable
-//   ⬜ persistence  —— 注册表 Run 键 / 计划任务 / 服务
+//   ✅ network      —— netstat -ano（**退化路径**：PID 有、进程路径无；
+//                       完整方案 GetExtendedTcpTable 本版未做，见 network_windows.go）
+//   ✅ persistence  —— 注册表 Run/RunOnce（含 Wow6432Node）+ 启动目录 + 计划任务
 //   ⬜ privileged   —— ETW（能力有限，明确标注）
 
 const Platform = "windows"
@@ -23,5 +24,7 @@ const Platform = "windows"
 func Registry() []func(Config) Collector {
 	return []func(Config) Collector{
 		NewProcess,
+		NewNetwork,
+		NewPersistence,
 	}
 }

@@ -11,8 +11,8 @@ package collector
 //
 // 迁移进度：
 //   ✅ process      —— /proc/<pid>/{stat,cmdline}
-//   ⬜ network      —— /proc/net/{tcp,udp,tcp6,udp6} + /proc/<pid>/fd 归属
-//   ⬜ persistence  —— systemd unit / cron / rc.local
+//   ✅ network      —— /proc/net/{tcp,tcp6} + /proc/<pid>/fd 归属（UDP 待做）
+//   ✅ persistence  —— cron（/etc/cron*、spool、~/.crontab）+ systemd unit
 //   ⬜ privileged   —— auditd
 
 const Platform = "linux"
@@ -21,5 +21,7 @@ const Platform = "linux"
 func Registry() []func(Config) Collector {
 	return []func(Config) Collector{
 		NewProcess,
+		NewNetwork,
+		NewPersistence,
 	}
 }
