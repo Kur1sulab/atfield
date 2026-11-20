@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>心之壁 · 终端安全态势融合平台</title>
+<script>
+/* 首帧定主题：必须在样式生效前跑，避免闪白/闪黑。默认浅色（纸白）。
+   历史：theme.v2 一次性迁到浅色 → theme.v3 一次性迁回深色 →
+   现在 theme.v4 一次性迁到浅色（产品默认改为纸白），之后完全尊重用户自己点选。 */
+(function () {
+  var t = "light";
+  try {
+    var s = localStorage.getItem("atfield.theme");
+    if (localStorage.getItem("atfield.theme.v4") !== "1") {
+      localStorage.setItem("atfield.theme.v4", "1");
+      s = null;
+    }
+    if (s === "dusk") s = "light";   /* 暖墨主题已移除：旧选择迁到当前默认 */
+    if (s === "dark" || s === "light") t = s;
+    localStorage.setItem("atfield.theme", t);
+  } catch (e) {}
+  document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.setAttribute("data-artex", t === "dark" ? "dark" : "light");
+})();
+</script>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="aegis-artex.css">
+<link rel="stylesheet" href="artex.css">
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="login-card glass" id="login-form" autocomplete="on">
+    <div class="login-brand"><span class="logo">心</span>
+      <div><b>心之壁</b><i>终端安全态势融合平台</i></div>
+    </div>
+    <label class="login-lab" for="login-user">账号</label>
+    <input id="login-user" name="username" autocomplete="username" spellcheck="false" placeholder="请输入账号">
+    <label class="login-lab" for="login-pass">口令</label>
+    <input id="login-pass" name="password" type="password" autocomplete="current-password" placeholder="请输入口令">
+    <button class="btn primary login-go" id="login-go" type="submit">登录</button>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-hint" id="login-hint">首次启动的随机口令在 <code>~/.atfield/INITIAL-ADMIN.txt</code>，登录后请立即改口令。</div>
+  </form>
+</div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">心</div>
+      <div class="brand-txt">
+        <div class="name">心之壁 <span class="ver" id="ver" hidden></span></div>
+        <div class="sub">终端安全态势融合平台</div>
+      </div>
+    </div>
+
+    <nav id="nav">
+      <button class="nav-item active" data-view="overview"><span class="dot"></span>态势总览</button>
+      <button class="nav-item" data-view="findings"><span class="dot"></span>告警与攻击链<span class="badge" id="b-findings">0</span></button>
+      <button class="nav-item" data-view="timeline"><span class="dot"></span>取证时间线</button>
+      <button class="nav-item" data-view="telemetry"><span class="dot"></span>终端遥测</button>
+      <div class="side-title">检测与响应</div>
+      <button class="nav-item" data-view="wall"><span class="dot"></span>心之壁</button>
+      <button class="nav-item" data-view="depth"><span class="dot"></span>纵深剖面<span class="badge" id="b-depth" hidden></span></button>
+      <button class="nav-item" data-view="ueba"><span class="dot"></span>行为基线 UEBA</button>
+      <button class="nav-item" data-view="ndr"><span class="dot"></span>网络检测 NDR<span class="badge" id="b-ndr">0</span></button>
+      <button class="nav-item" data-view="canary"><span class="dot"></span>诱饵防御<span class="badge" id="b-canary">0</span></button>
+      <button class="nav-item" data-view="intel"><span class="dot"></span>威胁情报</button>
+      <button class="nav-item" data-view="playbooks"><span class="dot"></span>自动处置 SOAR<span class="badge" id="b-pending">0</span></button>
+      <button class="nav-item" data-view="tickets"><span class="dot"></span>处置工单<span class="badge" id="b-tickets">0</span></button>
+      <div class="side-title">资产与合规</div>
+      <button class="nav-item" data-view="inventory"><span class="dot"></span>资产软件</button>
+      <button class="nav-item" data-view="docker"><span class="dot"></span>容器态势<span class="badge" id="b-docker" hidden></span></button>
+      <button class="nav-item" data-view="compliance"><span class="dot"></span>合规矩阵</button>
+      <button class="nav-item" data-view="baseline"><span class="dot"></span>安全基线</button>
+      <div class="side-title">运行</div>
+      <button class="nav-item" data-view="response"><span class="dot"></span>响应与审计</button>
+      <button class="nav-item" data-view="governance"><span class="dot"></span>治理与审计链</button>
+      <button class="nav-item" data-view="collectors"><span class="dot"></span>采集通道</button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="side-title">采集器状态</div>
+      <div class="mini-list" id="collector-mini"></div>
+      <div class="theme-sw" id="theme-sw" role="group" aria-label="界面主题">
+        <button class="tsw" data-theme="dark" title="石墨（深色，可切换）" aria-label="石墨主题"><i></i></button>
+        <button class="tsw on" data-theme="light" title="纸白（浅色，默认）" aria-label="纸白主题"><i></i></button>
+        <span class="tsw-label">主题</span>
+      </div>
+      <div class="link-status">
+        <span class="cd" id="sse-dot"></span><span id="sse-txt">连接中…</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <div class="host" id="host">—</div>
+        <div class="meta" id="meta">—</div>
+      </div>
+      <div class="tb-right">
+        <span class="pill-group">
+          <span class="pill" id="pill-health">健康度 —</span>
+          <span class="pill" id="pill-threat">风险 —</span>
+        </span>
+        <span class="who" id="who" hidden></span>
+        <button class="btn sm" id="btn-refresh">刷新</button>
+        <button class="btn sm" id="btn-selftest">自检</button>
+        <a class="btn sm" id="btn-report" href="/api/report.md">导出报告</a>
+      </div>
+    </header>
+    <section class="content" id="root">
+      <div class="empty">正在加载…</div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+/* ============================================================================
+   AR TEX · 心之壁 AEGIS 桥接层
+   ----------------------------------------------------------------------------
+   职责：把心之壁自己的令牌（--bg/--panel/--accent/--glass-*）钉到 AR TEX 的
+         零彩度色板，并拆掉毛玻璃/光晕，最后接上 artex.css 的机甲装饰。
+   纪律：本文件只改写令牌与装饰，不动布局结构与交互逻辑。
+   加载：在 style.css 之后、artex.css 之前引入（artex.css 负责装饰钩子）。
+   ========================================================================== */
+
+/* ------------------------------------------------------------ 令牌覆盖 */
+:root,
+:root[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --bg-2: #0f0f0f;
+  --side: #0a0a0a;
+  --panel: #141414;
+  --panel-hi: #1a1a1a;
+  --bar: #0a0a0a;
+
+  --text: #ededed;
+  --muted: #8a8a8a;
+  --faint: #6b6b6b;
+
+  --accent: #ededed;
+  --accent-fill: #ededed;
+  --accent-weak: rgba(255, 255, 255, 0.09);
+  --accent-line: #383838;
+  --on-accent: #0a0a0a;
+
+  --ok: #ededed;
+  --warn: #c4c4c4;
+  --amber: #c4c4c4;
+  --bad: oklch(0.637 0.208 25.331);
+  --info: #8a8a8a;
+  --neutral: #6b6b6b;
+
+  --line: #262626;
+  --line-hi: #383838;
+  --hover: rgba(255, 255, 255, 0.05);
+
+  --r: 10px;
+  --r-sm: 6px;
+  --r-xs: 4px;
+
+  --glass-hi: transparent;
+  --glass-lo: transparent;
+  --login-glow: transparent;
+  --login-veil: rgba(0, 0, 0, 0.6);
+  --gauge-track: #262626;
+  /* 主题切换圆点也去色：AR TEX 不允许一处彩点破坏整页零彩度 */
+  --sw-dark: #ededed;
+  --sw-light: #ffffff;
+}
+
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-2: #fafafa;
+  --side: #ffffff;
+  --panel: #ffffff;
+  --panel-hi: #f5f5f5;
+  --bar: #ffffff;
+
+  --text: #171717;
+  --muted: #737373;
+  --faint: #a3a3a3;
+
+  --accent: #171717;
+  --accent-fill: #0a0a0a;
+  --accent-weak: rgba(0, 0, 0, 0.07);
+  --accent-line: #d4d4d4;
+  --on-accent: #ffffff;
+
+  --ok: #171717;
+  --warn: #525252;
+  --amber: #525252;
+  --bad: oklch(0.577 0.245 27.325);
+  --info: #737373;
+  --neutral: #a3a3a3;
+
+  --line: #e5e5e5;
+  --line-hi: #d4d4d4;
+  --hover: rgba(0, 0, 0, 0.04);
+
+  --r: 10px;
+  --r-sm: 6px;
+  --r-xs: 4px;
+
+  --glass-hi: transparent;
+  --glass-lo: transparent;
+  --login-glow: transparent;
+  --login-veil: rgba(0, 0, 0, 0.32);
+  --gauge-track: #e5e5e5;
+}
+
+/* 字体：全站走系统栈，数字/状态一律等宽 */
+:root,
+:root[data-theme="dark"],
+:root[data-theme="light"] {
+  --font: -apple-system, "SF Pro Text", "Helvetica Neue", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo,
+          Consolas, monospace;
+}
+
+/* --------------------------------------------------- 拆毛玻璃、去光晕、收圆角 */
+html body * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html body { background-image: none !important; }
+html body .sidebar,
+html body .topbar,
+html body .glass,
+html body .login-card,
+html body .panel,
+html body .toast {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+html body .sidebar,
+html body .topbar { background: var(--bg) !important; }
+html body .login-card,
+html body .glass,
+html body .panel { background: var(--panel) !important; }
+html body .login { background: transparent !important; }
+/* 登录页也铺 24px 仪表网格（AR TEX 全局底纹） */
+html body,
+html body .login {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--line) 60%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--line) 60%, transparent) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  background-attachment: fixed !important;
+  background-color: var(--bg) !important;
+}
+/* 圆角统一收窄到机甲取向（大圆角是 iOS 味，与 AR TEX 相冲） */
+html body .login-brand .logo,
+html body .logo { border-radius: var(--r-sm) !important; }
+html body .pill,
+html body .panel-tag { border-radius: 999px !important; }
+
+/* ------------------------------------------------------------ 机甲装饰 */
+/* 24px 仪表网格：铺在主内容区，侧栏/顶栏保持实底 */
+html body .content {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--line) 60%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--line) 60%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: local;
+}
+
+/* 顶栏：左侧 96px 45° 铭牌条纹 + 底部极淡基线 */
+html body .topbar { position: relative; }
+html body .topbar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 96px;
+  height: 3px;
+  background-image: repeating-linear-gradient(45deg, var(--text) 0 5px, transparent 5px 11px);
+  opacity: 0.4;
+  pointer-events: none;
+}
+html body .topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* 面板：隐形描边 → hover 亮起 + 12px 角标括号 */
+html body .panel {
+  position: relative;
+  border: 1px solid transparent !important;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--line) 55%, transparent) !important;
+  transition: box-shadow 160ms ease;
+}
+html body .panel:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--line) 40%, var(--text)) !important;
+}
+html body .panel::before,
+html body .panel::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--text);
+  border-style: solid;
+  opacity: 0.18;
+  transition: opacity 160ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+html body .panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+html body .panel::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
+html body .panel:hover::before,
+html body .panel:hover::after { opacity: 0.6; }
+
+/* 面板标题：等宽铭牌小字 */
+html body .panel-head h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* 侧栏分组标题：// 前缀 */
+html body .side-title::before {
+  content: "// ";
+  opacity: 0.5;
+  font-family: var(--mono);
+}
+
+/* 主按钮：切角 */
+html body .btn.primary,
+html body .btn.mint {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  border-radius: var(--r-sm) !important;
+  filter: none !important;
+}
+html body .btn[disabled] {
+  background: transparent !important;
+  border: 1px solid var(--line) !important;
+  color: var(--muted) !important;
+  opacity: 1 !important;
+}
+
+/* 导航选中：左导轨 */
+html body .nav-item {
+  box-shadow: inset 2px 0 0 0 transparent;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+html body .nav-item.active {
+  box-shadow: inset 2px 0 0 0 var(--text);
+}
+html body .nav-item .dot { background: var(--muted); }
+html body .nav-item.active .dot { background: var(--text); }
+
+/* 输入框：左侧 2px 竖线导轨 */
+html body input:not([type="checkbox"]):not([type="radio"]),
+html body textarea,
+html body select {
+  box-shadow: inset 2px 0 0 0 color-mix(in oklab, var(--text) 40%, transparent);
+  border-radius: var(--r-sm) !important;
+}
+html body input:focus,
+html body textarea:focus,
+html body select:focus {
+  border-color: var(--text) !important;
+  box-shadow: inset 2px 0 0 0 var(--text), 0 0 0 1px var(--text) !important;
+}
+
+/* 表头：铭牌式大写小字 */
+html body thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* 数字一律等宽对齐 */
+html body { font-variant-numeric: tabular-nums; }
+html body .pill,
+html body .badge,
+html body .ver,
+html body .cd,
+html body code,
+html body kbd { font-family: var(--mono); }
+
+/* 登录卡：去掉玻璃拟态，改成告示牌 */
+html body .login-card {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--r) !important;
+  position: relative;
+}
+html body .login-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 64px;
+  height: 3px;
+  background-image: repeating-linear-gradient(45deg, var(--text) 0 5px, transparent 5px 11px);
+  opacity: 0.45;
+}
+html body .login-hint {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}

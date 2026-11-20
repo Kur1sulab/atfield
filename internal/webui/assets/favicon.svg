@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="atfield">
+  <rect x="0.5" y="0.5" width="23" height="23" rx="5" fill="#101828"/>
+  <g transform="translate(4.080 4.080) scale(0.660)">
+    <path d="M 9.8 4 A 8 8 0 0 0 9.8 20 Z" fill="#F2F4F7" stroke="none"/>
+  <path d="M 14.2 4 A 8 8 0 0 1 14.2 20 Z" stroke="#F2F4F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>
