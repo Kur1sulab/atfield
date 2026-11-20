@@ -10,9 +10,14 @@ package collector
 // 迁移进度（对拍时按这张表算覆盖率）：
 //   ✅ process      —— 本轮完成
 //   ✅ persistence  —— LaunchAgents/Daemons plist + crontab + /etc/periodic
+//   ✅ privileged   —— eslogger（root + Full Disk Access；非 root 时 Probe 明说原因）
+//   ✅ fileless     —— 命令行（ps）+ 映像删除（lsof +L1）+ 匿名可执行段（vmmap）
 //   ⬜ network      —— lsof（macOS 26+ netstat 失效）
-//   ⬜ privileged   —— eslogger（需 root + TCC 授权）
-//   ⬜ session/authlog / logstream / integrity / baseline / fileless
+//   ⬜ session/authlog / logstream / integrity / baseline
+//
+// fileless 在 Python 侧**没有对应实现**（那边的 FilelessWatcher 实际是
+// shell 历史监控，name="shellhist"），所以它不是迁移项而是新增能力；
+// 对拍脚本要把它列进「Go 独有」而不是「Python 缺失」。
 //
 // 未做：Python 版的 LoginItemCollector（securitysw，读 backgrounditems.btm）。
 // 它的告警语义是「登录项消失了」，必须依赖 state store 才有意义——
@@ -27,5 +32,9 @@ func Registry() []func(Config) Collector {
 		NewProcess,
 		NewNetwork,
 		NewPersistence,
+		// 提权与无文件：两者的顺序与 Python REGISTRY 一致（Privileged 在后段，
+		// Fileless 收尾）。顺序影响控制台展示与对拍输出，不许随手重排。
+		NewPrivileged,
+		NewFileless,
 	}
 }
