@@ -1,0 +1,29 @@
+{
+ "rows": [
+  {
+   "pid": 100,
+   "ppid": 1,
+   "exe": "/sbin/launchd"
+  },
+  {
+   "pid": 200,
+   "ppid": 100,
+   "exe": "/bin/zsh"
+  },
+  {
+   "pid": 300,
+   "ppid": 200,
+   "exe": "/usr/bin/whoami"
+  },
+  {
+   "pid": 400,
+   "ppid": 200,
+   "exe": "/tmp/backdoor"
+  },
+  {
+   "pid": 500,
+   "ppid": 200,
+   "exe": "/usr/bin/curl"
+  }
+ ]
+}
