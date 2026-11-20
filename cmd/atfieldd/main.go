@@ -86,6 +86,11 @@ func main() {
 			entry := map[string]any{
 				"collector": c.Name(), "ms": ms, "events": len(evs),
 			}
+			// 清点条数：persistence 这类「全量清点、少数命中」的采集器，
+			// 只报事件数会让人以为只看了几条。
+			if ic, ok := c.(interface{ Items() int }); ok {
+				entry["items"] = ic.Items()
+			}
 			if err != nil {
 				entry["error"] = err.Error()
 			}
