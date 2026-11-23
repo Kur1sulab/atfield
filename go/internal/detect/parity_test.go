@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // TestPythonParity 对拍：同一份事件语料，Go 输出必须与 Python 版**逐条逐字段**一致。

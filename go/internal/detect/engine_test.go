@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // customRule 计数型测试规则：命中一切事件。

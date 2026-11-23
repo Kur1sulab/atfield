@@ -41,7 +41,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 判定理由 slug（顺序即输出顺序，对拍时逐字比对）。

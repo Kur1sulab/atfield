@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/parity"
+	"github.com/Kur1sulab/atfield/go/internal/parity"
 )
 
 // 事件流读取 + 重放归一：缺 eid/host 要补齐，缺 ts 要拒绝。

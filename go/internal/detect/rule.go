@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // ---------------- 冷却分级（engine.py:23-36） ----------------

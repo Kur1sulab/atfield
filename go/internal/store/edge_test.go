@@ -10,7 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // TestFindingWithoutIDGetsOne 外部构造的告警没给 ID 时必须补一个。

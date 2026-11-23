@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/detect"
-	"github.com/Kur1sulab/atfield/internal/enforcer"
-	"github.com/Kur1sulab/atfield/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/detect"
+	"github.com/Kur1sulab/atfield/go/internal/enforcer"
+	"github.com/Kur1sulab/atfield/go/internal/store"
 )
 
 // Product 产品名（与 Python 版 __product__ 一致）。

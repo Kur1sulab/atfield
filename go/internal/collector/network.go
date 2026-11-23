@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // c2Ports 常见 C2 / 后门 / 管理面端口，与 Python 版 network.py 的

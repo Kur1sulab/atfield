@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 采集模式。

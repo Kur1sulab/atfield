@@ -23,8 +23,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Kur1sulab/atfield/internal/enforcer"
-	"github.com/Kur1sulab/atfield/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/enforcer"
+	"github.com/Kur1sulab/atfield/go/internal/store"
 )
 
 // csrfHeader 写操作必须带的头（与前端 API() 封装一致）。

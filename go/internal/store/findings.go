@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 工单状态。Python 侧只接受这三个值，别的原样忽略。

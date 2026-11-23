@@ -7,7 +7,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // RowsFromGo 把 Go 侧 Finding 规范化成 Row。

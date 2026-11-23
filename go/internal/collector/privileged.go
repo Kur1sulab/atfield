@@ -44,7 +44,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 归一动作。平台解析器只负责填这个字段，判定只看它。

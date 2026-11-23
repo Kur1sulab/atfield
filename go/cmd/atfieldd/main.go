@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/collector"
+	"github.com/Kur1sulab/atfield/go/internal/collector"
 )
 
 // Version 由构建时 ldflags 注入：

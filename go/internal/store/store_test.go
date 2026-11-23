@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // newTestStore 在临时目录建一个落盘存储。

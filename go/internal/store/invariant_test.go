@@ -14,7 +14,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // TestMemoryEqualsDiskAfterReopen 随机操作后，重开实例的内存态必须与关前一致。

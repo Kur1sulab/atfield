@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Kur1sulab/atfield/internal/model"
-	"github.com/Kur1sulab/atfield/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/store"
 )
 
 // handlePing 健康检查。{"ok":true,"version":...,"ts":...}

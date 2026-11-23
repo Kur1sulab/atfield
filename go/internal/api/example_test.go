@@ -15,10 +15,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/api"
-	"github.com/Kur1sulab/atfield/internal/enforcer"
-	"github.com/Kur1sulab/atfield/internal/store"
-	"github.com/Kur1sulab/atfield/internal/webui"
+	"github.com/Kur1sulab/atfield/go/internal/api"
+	"github.com/Kur1sulab/atfield/go/internal/enforcer"
+	"github.com/Kur1sulab/atfield/go/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/webui"
 )
 
 func Example_wiring() {

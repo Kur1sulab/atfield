@@ -3,7 +3,7 @@ package detect
 import (
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // ---------------- 测试脚手架 ----------------

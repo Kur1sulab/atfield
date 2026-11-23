@@ -1,10 +1,11 @@
 # 心之壁 · Go 重写版
 
-> Python 版（现行版本，v1.1.x）：**[Kur1sulab/atfield](https://github.com/Kur1sulab/atfield)**
-> 本仓是它的 Go 重写版。**两个版本并行存在，直到对拍逐条一致才切换**——不是「写完就换」。
+> 本目录是 **[心之壁 AT Field](https://github.com/Kur1sulab/atfield)** 的 Go 重写版，与 Python 版**同仓共存**：
+> 仓库根是 Python 现行版本（v1.1.x），`go/` 是 Go 版。
+> **两个版本并行存在，直到对拍逐条一致才切换**——不是「写完就换」。
 
 心之壁是一套终端安全态势融合平台（EDR + HIDS + UEBA + NDR + 诱饵 + SOAR）。
-本仓用 Go 重做采集层、检测引擎、存储与 HTTP 层，目标是**不依赖系统 Python**地跑在 macOS / Windows / Linux 上。
+本目录用 Go 重做采集层、检测引擎、存储与 HTTP 层，目标是**不依赖系统 Python**地跑在 macOS / Windows / Linux 上。
 
 ---
 
@@ -54,7 +55,7 @@ go run ./cmd/parity -py-from out/parity/py_findings.jsonl
 ```
 
 对拍工具**只报告不修正**：任何不一致都是迁移缺口，由人决策。100% 一致退出码 0，否则 2。
-Python 侧的只读适配器在 atfield 仓库根目录：`parity_cli.py`。
+Python 侧的只读适配器在同一仓库根目录：`../parity_cli.py`。
 
 ## 四、目录
 
@@ -111,4 +112,4 @@ go build -o out/atfieldd ./cmd/atfieldd
 
 ## 九、许可
 
-与 Python 版一致，见 atfield 仓库。
+与 Python 版一致，见仓库根的 [LICENSE](../LICENSE)。

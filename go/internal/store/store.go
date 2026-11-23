@@ -38,7 +38,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 默认容量。与 Python 版 cfg["store"] 的缺省值一致——

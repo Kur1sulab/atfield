@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // procInfo 统一的进程信息（各平台把原生字段映射到这里再判定）。

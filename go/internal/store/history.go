@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // loadHistory 从磁盘回填全部历史。坏行跳过（历史坏行不能挡住启动）。

@@ -10,9 +10,9 @@ package store_test
 import (
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/detect"
-	"github.com/Kur1sulab/atfield/internal/model"
-	"github.com/Kur1sulab/atfield/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/detect"
+	"github.com/Kur1sulab/atfield/go/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/store"
 )
 
 // adapter 把 *store.Store 包成 detect.Store 的最小实现（wiring 层就长这样）。

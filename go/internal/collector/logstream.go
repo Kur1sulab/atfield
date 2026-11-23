@@ -38,7 +38,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // 事件类型（与 Python 签名表右列逐字一致）。

@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Kur1sulab/atfield/internal/model"
-	"github.com/Kur1sulab/atfield/internal/store"
+	"github.com/Kur1sulab/atfield/go/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/store"
 )
 
 // dimension 健康度维度（Python DIMENSIONS）。

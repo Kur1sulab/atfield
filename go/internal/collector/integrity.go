@@ -50,7 +50,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // EventIntegrityChange 事件类型（与 Python 字面量一致）。

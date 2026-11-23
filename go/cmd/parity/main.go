@@ -28,9 +28,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/detect"
-	"github.com/Kur1sulab/atfield/internal/model"
-	"github.com/Kur1sulab/atfield/internal/parity"
+	"github.com/Kur1sulab/atfield/go/internal/detect"
+	"github.com/Kur1sulab/atfield/go/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/parity"
 )
 
 const (

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // sevCN 严重度中文（与 Python model.SEVERITY_CN 同字面量）。

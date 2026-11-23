@@ -10,7 +10,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 func mkFinding(sev string, ts float64) *model.Finding {

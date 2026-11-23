@@ -63,7 +63,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kur1sulab/atfield/internal/model"
+	"github.com/Kur1sulab/atfield/go/internal/model"
 )
 
 // EventBaselineDrift 基线状态由好转坏（与 Python 版 kind 完全一致）。
