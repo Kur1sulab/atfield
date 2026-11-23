@@ -28,7 +28,7 @@ import (
 // Version 由构建时 ldflags 注入：
 //
 //	go build -ldflags "-X main.Version=v1.0.0-go"
-var Version = "0.1.0-go"
+var Version = "0.2.0-go"
 
 func main() {
 	var (
