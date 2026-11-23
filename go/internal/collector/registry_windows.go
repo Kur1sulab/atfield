@@ -20,6 +20,11 @@ package collector
 //                       4688 依赖「审核进程创建」策略，默认关闭——Limits 里写明）
 //   ✅ fileless     —— CIM 命令行（PowerShell 编码命令/IEX）+ 临时目录未签名执行
 //                       （**不读进程内存**：无 VAD 遍历，匿名段恒为「未探测」）
+//   ✅ session      —— Event Log 4624/4634 登录/注销轮询（依赖审核登录策略）
+//   ✅ integrity    —— 关键目录（System32、Program Files、启动目录）mtime/size 基线
+//   ✅ baseline     —— 关键可执行文件指纹基线（首轮建库，后续只报差异）
+//   ✅ logstream    —— 事件日志 stream tail（Security/System/Application）
+//   ✅ authlog      —— 4625 失败登录聚合（登录类型/来源 IP 分桶）
 //
 // fileless 在 Python 侧没有对应实现（那边的 FilelessWatcher 是 shell 历史监控），
 // 对拍时归入「Go 独有」。
@@ -27,14 +32,23 @@ package collector
 const Platform = "windows"
 
 // Registry 返回本平台采集器构造函数。
+//
+// 顺序与 Python 版 atfield/collectors/__init__.py 的 REGISTRY 逐项对齐：
+// Process → Network → Session → Persistence → Integrity → Baseline →
+// LogStream → Privileged → AuthLog →（LoginItem 未实现）→ Fileless。
+// 对拍按位置逐条比对，改顺序等于改行为。
 func Registry() []func(Config) Collector {
 	return []func(Config) Collector{
 		NewProcess,
 		NewNetwork,
+		NewSession,
 		NewPersistence,
-		// 提权（Security 日志轮询）与无文件（CIM 命令行 + 签名）：
-		// 顺序与 Python REGISTRY 一致，改顺序等于改行为。
+		NewIntegrity,
+		NewBaseline,
+		NewLogStream,
 		NewPrivileged,
+		NewAuthLog,
+		// Fileless：Go 独有能力，Python 无对应项，固定收尾。
 		NewFileless,
 	}
 }

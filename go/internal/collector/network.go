@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -185,6 +186,76 @@ func (n *Network) diff(rows []netRow) []model.Event {
 
 	n.conns, n.listens = conns, listens
 	return out
+}
+
+// Snapshot 供 store.set_state("connections", ...) 使用，键名照 Python 版
+// （active / public / rows / listeners / ts）。
+//
+// 为什么从 n.conns / n.listens 取而不是重新跑一遍 lsof：那一轮刚采完的
+// 快照就是这两个 map（diff 结尾刚整体替换过），再采一次等于每 5 秒多开
+// 两个子进程，还会让「面板上的连接」与「事件里的连接」来自不同时刻。
+//
+// rows / listeners 都做稳定排序：map 迭代顺序随机，不排序会让同一份数据
+// 两次请求顺序不同，前端列表跟着跳。
+func (n *Network) Snapshot() map[string]any {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	rows := make([]map[string]any, 0, len(n.conns))
+	pub := 0
+	for _, r := range n.conns {
+		public := r.RAddr != "" && !isPrivateHost(r.RAddr)
+		if public {
+			pub++
+		}
+		rows = append(rows, map[string]any{
+			"proto": r.Proto, "laddr": r.LAddr, "lport": r.LPort,
+			"raddr": r.RAddr, "rport": r.RPort, "state": r.State,
+			"pid": r.PID, "process": r.Process, "user": r.User,
+			"public": public,
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		// 公网连接排前面，再按对端端口——与 Python 的 sort 键一致。
+		pi, pj := rows[i]["public"].(bool), rows[j]["public"].(bool)
+		if pi != pj {
+			return pi
+		}
+		return asIntAny(rows[i]["rport"]) < asIntAny(rows[j]["rport"])
+	})
+
+	listeners := make([]map[string]any, 0, len(n.listens))
+	for _, r := range n.listens {
+		listeners = append(listeners, map[string]any{
+			"proto": r.Proto, "laddr": r.LAddr, "lport": r.LPort,
+			"pid": r.PID, "process": r.Process, "user": r.User,
+		})
+	}
+	sort.Slice(listeners, func(i, j int) bool {
+		return asIntAny(listeners[i]["lport"]) < asIntAny(listeners[j]["lport"])
+	})
+	if len(rows) > 300 {
+		rows = rows[:300]
+	}
+	if len(listeners) > 120 {
+		listeners = listeners[:120]
+	}
+	return map[string]any{
+		"active":    len(n.conns),
+		"public":    pub,
+		"rows":      rows,
+		"listeners": listeners,
+		"ts":        nowSeconds(),
+	}
+}
+
+// asIntAny 读 map 里的端口值。写成小工具而不是断言 int：
+// rows 是 map[string]any，排序闭包里断言失败会 panic，宁可退化成 0。
+func asIntAny(v any) int {
+	if n, ok := v.(int); ok {
+		return n
+	}
+	return 0
 }
 
 // beacon 记录「同一进程 + 同一目的地」第几次被看到，只采不算：

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Kur1sulab/atfield/go/internal/model"
@@ -29,6 +30,19 @@ type procInfo struct {
 // Process 进程采集器。
 type Process struct {
 	Base
+
+	// 最近一轮的清点结果。为什么采集器自己存而不是让服务层算：
+	// Collect 只返回**可疑**事件，全量进程表在返回前就被丢弃了；服务层
+	// 拿不到进程总数，控制台 totals.processes 就只能永远是 0（看起来像
+	// 采集器没跑）。这里在采集时顺手记下三个数，代价是三个字段。
+	//
+	// 单独一把锁：Snapshot 由 HTTP 协程读，Collect 由轮询协程写，
+	// 复用 Base 的字段会牵动状态机，不划算。
+	snapMu sync.Mutex
+	count  int                 // 本轮进程总数（Python: processes.count）
+	susp   int                 // 本轮命中可疑判定数
+	users  map[string]struct{} // 进程属主去重（Python: processes.users）
+	snapTS float64
 }
 
 // NewProcess 构造并自检。
@@ -51,6 +65,18 @@ func (p *Process) Collect(ctx context.Context) ([]model.Event, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 先记清点结果再判定：判定里若因为数据异常提前 return，
+	// 控制台也该看到「这一轮看到了多少进程」，而不是 0。
+	users := make(map[string]struct{}, len(procs))
+	for _, pi := range procs {
+		if pi.User != "" {
+			users[pi.User] = struct{}{}
+		}
+	}
+	p.snapMu.Lock()
+	p.count, p.users, p.snapTS = len(procs), users, nowSeconds()
+	p.snapMu.Unlock()
+
 	var out []model.Event
 	for _, pi := range procs {
 		reasons := suspiciousProc(pi)
@@ -74,7 +100,26 @@ func (p *Process) Collect(ctx context.Context) ([]model.Event, error) {
 		}
 		out = append(out, *ev)
 	}
+	p.snapMu.Lock()
+	p.susp = len(out)
+	p.snapMu.Unlock()
 	return out, nil
+}
+
+// Snapshot 供 store.set_state("processes", ...) 使用，键名照 Python 版。
+//
+// 刻意**不**输出 Python 的 rows/cpu_total/hidden：Go 采集层目前只取
+// pid/ppid/user/comm/args，没有 CPU、RSS、启动时间，硬凑三个键只会让
+// 控制台画出一列 0。前端对缺键有降级（`r.cpu || 0`），比假数据诚实。
+func (p *Process) Snapshot() map[string]any {
+	p.snapMu.Lock()
+	defer p.snapMu.Unlock()
+	return map[string]any{
+		"count":      p.count,
+		"suspicious": p.susp,
+		"users":      len(p.users),
+		"ts":         p.snapTS,
+	}
 }
 
 // suspiciousProc 返回命中的可疑理由（空 = 正常）。

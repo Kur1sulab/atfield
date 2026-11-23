@@ -160,12 +160,20 @@ func run() int {
 	}
 	res := parity.Compare(pyRows, goRows)
 
+	// kind 覆盖：对齐率只说明「两侧一致」，不说明「事件被规则看见」。
+	// 两侧都 0 告警的 kind 要单独摆出来（详见 parity.Coverage 注释）。
+	allRows := make([]parity.Row, 0, len(pyRows)+len(goRows))
+	allRows = append(allRows, pyRows...)
+	allRows = append(allRows, goRows...)
+	cov := parity.Coverage(events, allRows)
+
 	rep := parity.Report{
 		Result: res, Events: len(events), MaxRows: o.maxRows,
 		PythonRules: countRules(pyRows), GoRules: countRules(goRows),
 	}
 	if !o.quiet {
 		rep.WriteConsole(os.Stdout)
+		printCoverage(cov)
 	} else {
 		fmt.Printf("%.2f%%\n", res.Rate()*100)
 	}
@@ -175,9 +183,15 @@ func run() int {
 	if err := writeReport(mdPath, jsonPath, rep); err != nil {
 		return fail("写报告: %v", err)
 	}
+	covPath := filepath.Join(o.out, "coverage.json")
+	if raw, err := json.MarshalIndent(cov, "", "  "); err == nil {
+		if err := os.WriteFile(covPath, raw, 0o644); err != nil {
+			return fail("写 kind 覆盖: %v", err)
+		}
+	}
 	if !o.quiet {
-		fmt.Printf("\n产物：\n  %s\n  %s\n  %s\n  %s\n",
-			mdPath, jsonPath, goPath, pyPath)
+		fmt.Printf("\n产物：\n  %s\n  %s\n  %s\n  %s\n  %s\n",
+			mdPath, jsonPath, goPath, pyPath, covPath)
 	}
 
 	switch {
@@ -436,4 +450,35 @@ func tail(s string, n int) string {
 		return s
 	}
 	return "…" + s[len(s)-n:]
+}
+
+// printCoverage 打印 kind 覆盖。
+//
+// 为什么要单独打印：对齐率 100% 只说明「两侧看到的是同一批告警」，
+// 不说明「这批事件被任何规则看过」。真实流里出现过 process.suspicious /
+// persistence.suspicious 这种没有任何规则消费的 kind——两侧都 0 告警，
+// 对齐率满分，检测却完全没发生。把「事件有量、告警为 0」的 kind 点名，
+// 才能把采集器契约问题从「完美对齐」里挖出来。
+func printCoverage(cov []parity.KindCoverage) {
+	kinds, events := len(cov), 0
+	silent := make([]parity.KindCoverage, 0, len(cov))
+	for _, c := range cov {
+		events += c.Events
+		if c.Silent() {
+			silent = append(silent, c)
+		}
+	}
+	fmt.Printf("\nkind 覆盖：%d 种 kind / %d 条事件；其中 %d 种事件有量但两侧 0 告警\n",
+		kinds, events, len(silent))
+	if len(silent) == 0 {
+		return
+	}
+	for i, c := range silent {
+		if i >= 10 {
+			fmt.Printf("  … 另有 %d 种\n", len(silent)-10)
+			break
+		}
+		fmt.Printf("  %-24s %6d 条事件  0 告警\n", c.Kind, c.Events)
+	}
+	fmt.Println("  （0 告警未必是缺陷：先对照采集器契约，确认这些 kind 是否在规则消费范围内）")
 }

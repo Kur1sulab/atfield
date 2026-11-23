@@ -15,6 +15,11 @@ package collector
 //   ✅ persistence  —— cron（/etc/cron*、spool、~/.crontab）+ systemd unit
 //   ✅ privileged   —— auditd（tail /var/log/audit/audit.log；非 root/未启用分别报原因）
 //   ✅ fileless     —— /proc/<pid>/maps（匿名可执行段 + memfd）+ exe 的 "(deleted)"
+//   ✅ session      —— utmpx 读登录/注销 + wtmp 轮转重开
+//   ✅ integrity    —— /etc /usr/local/bin 等关键路径 mtime/size 基线比对
+//   ✅ baseline     —— 关键可执行文件指纹基线（首轮建库，后续只报差异）
+//   ✅ logstream    —— /var/log 关键日志 tail（stream 模式）
+//   ✅ authlog      —— /var/log/auth.log 失败登录聚合（非 root 时 Probe 明说原因）
 //
 // fileless 在 Python 侧没有对应实现（那边的 FilelessWatcher 是 shell 历史监控），
 // 对拍时归入「Go 独有」。
@@ -22,14 +27,23 @@ package collector
 const Platform = "linux"
 
 // Registry 返回本平台采集器构造函数。
+//
+// 顺序与 Python 版 atfield/collectors/__init__.py 的 REGISTRY 逐项对齐：
+// Process → Network → Session → Persistence → Integrity → Baseline →
+// LogStream → Privileged → AuthLog →（LoginItem 未实现）→ Fileless。
+// 对拍按位置逐条比对，改顺序等于改行为。
 func Registry() []func(Config) Collector {
 	return []func(Config) Collector{
 		NewProcess,
 		NewNetwork,
+		NewSession,
 		NewPersistence,
-		// 提权（Security 日志轮询）与无文件（CIM 命令行 + 签名）：
-		// 顺序与 Python REGISTRY 一致，改顺序等于改行为。
+		NewIntegrity,
+		NewBaseline,
+		NewLogStream,
 		NewPrivileged,
+		NewAuthLog,
+		// Fileless：Go 独有能力，Python 无对应项，固定收尾。
 		NewFileless,
 	}
 }

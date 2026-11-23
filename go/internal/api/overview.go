@@ -145,26 +145,77 @@ func (s *Server) buildOverview() map[string]any {
 	}
 }
 
-// collectorRows 采集器状态行。Python 每行还有 mode/interval/available/reason，
-// 那些信息在采集器对象上，store 只存运行统计——因此这里只输出 store 确实有的字段，
-// 不拿空串去填 mode/interval（前端用 `mode || '-'` 能降级）。
+// CollectorInfo 采集器的静态画像（名字/模式/周期/可用性）。
+//
+// 为什么由装配层注入而不是 store 里读：这些是**进程内对象**的属性
+// （Probe 的结论、Interval 的配置），落盘没有意义——重启后要重新探。
+// Python 版的 /api/overview 每行都带这几项，之前 Go 侧没有来源只能省掉；
+// 服务层起来之后有了真来源，就补回来（前端 `mode || '-'` 的降级不再是常态）。
+type CollectorInfo struct {
+	Name      string `json:"name"`
+	Mode      string `json:"mode"`
+	Interval  string `json:"interval"`
+	Available bool   `json:"available"`
+	// Probed 是否已经做过可用性探测。false 时 Available 无意义——
+	// 前端要能区分「探测过且可用」与「还没探测」，否则首屏会把
+	// 尚未自检的采集器当成健康。
+	Probed bool   `json:"probed"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// CollectorInfoSource 采集器画像的来源（装配层实现；nil 时只用 store 统计）。
+//
+// 为什么是接口而不是静态切片：可用性是 Probe 的结论，而 Probe 可能是
+// 秒级操作（privileged 要试跑 eslogger）。静态切片要么在启动时把服务
+// 卡住几秒，要么永远是启动瞬间的快照——接口让 API 每次读当前缓存。
+type CollectorInfoSource interface {
+	CollectorInfo() []CollectorInfo
+}
+
+// collectorRows 采集器状态行。store 提供运行统计，Config.Collectors 提供
+// 静态画像；两者按名字合并。只出现在其中一边的也要列出来——
+// 「注册了但从没跑过」和「根本没注册」在控制台上必须长得不一样。
 func (s *Server) collectorRows(meta store.Meta) []map[string]any {
-	names := make([]string, 0, len(meta.Collectors))
+	var infos []CollectorInfo
+	if src := s.cfg.Collectors; src != nil {
+		infos = src.CollectorInfo()
+	}
+	info := make(map[string]CollectorInfo, len(infos))
+	names := make([]string, 0, len(meta.Collectors)+len(infos))
+	seen := make(map[string]bool, len(meta.Collectors)+len(infos))
+	for _, ci := range infos {
+		info[ci.Name] = ci
+		if !seen[ci.Name] {
+			seen[ci.Name] = true
+			names = append(names, ci.Name)
+		}
+	}
 	for n := range meta.Collectors {
-		names = append(names, n)
+		if !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
 	}
 	sort.Strings(names)
 	out := make([]map[string]any, 0, len(names))
 	for _, n := range names {
 		c := meta.Collectors[n]
-		out = append(out, map[string]any{
+		row := map[string]any{
 			"name":       n,
 			"runs":       c.Runs,
 			"errors":     c.Errors,
 			"last_error": c.LastError,
 			"last_ms":    c.LastMS,
 			"last_ts":    c.LastTS,
-		})
+		}
+		if ci, ok := info[n]; ok {
+			row["mode"] = ci.Mode
+			row["interval"] = ci.Interval
+			row["available"] = ci.Available
+			row["probed"] = ci.Probed
+			row["reason"] = ci.Reason
+		}
+		out = append(out, row)
 	}
 	return out
 }

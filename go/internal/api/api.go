@@ -75,6 +75,9 @@ type Config struct {
 	Enforcer enforcer.Backend
 	// Auth 鉴权；nil = 开放模式（仅建议在回环地址上这样跑）。
 	Auth Authorizer
+	// Collectors 采集器静态画像来源（名字/模式/周期/可用性），供 /api/overview
+	// 的 collectors 行补齐 Python 版就有的那几列；nil 时只输出运行统计。
+	Collectors CollectorInfoSource
 	// Version 产品版本；空用 DefaultVersion。
 	Version string
 	// Host / User 展示用；空则取 os.Hostname() / 环境变量。
@@ -137,6 +140,8 @@ func (s *Server) routes() {
 
 	// 主体数据
 	m.HandleFunc("GET /api/overview", s.handleOverview)
+	// /api/views：视图层聚合（Go 新增，Python 无）。见 views_api.go 顶部说明。
+	m.HandleFunc("GET /api/views", s.handleViews)
 	m.HandleFunc("GET /api/events", s.handleEvents)
 	m.HandleFunc("GET /api/event", s.handleEventDetail)
 	m.HandleFunc("GET /api/findings", s.handleFindings)
@@ -163,11 +168,30 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/firewall/flush", s.handleFirewallFlush)
 
 	// 其余一切：静态资源（/api/ 前缀在 webui 里 404 unknown api）
+	// 未知 /api/* 先过鉴权再 404：Python 也是在 _static 之前统一
+	// `if path.startswith("/api/"): _guard("read")`——未登录的人不该通过
+	// 「404 还是 401」把接口面摸清楚。这里不注册 "/api/" 兜底模式：
+	// 那样会让「POST /api/ping」从 405 退化成 404（Go 的 ServeMux 会先命中
+	// 方法匹配的兜底）。改成包一层静态 handler，405 语义保持不变。
 	web := s.cfg.Web
 	if web == nil {
 		web = http.HandlerFunc(s.fallback404)
 	}
-	m.Handle("GET /", web)
+	m.Handle("GET /", s.guardWeb(web))
+}
+
+// guardWeb 静态资源入口：/api/ 前缀先鉴权再 404，其余原样交给 webui。
+func (s *Server) guardWeb(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if s.guard(w, r, "read") == nil {
+				return
+			}
+			writeErr(w, http.StatusNotFound, "unknown api")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Handler 返回可直接 ListenAndServe 的 handler。

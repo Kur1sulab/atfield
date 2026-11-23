@@ -466,3 +466,61 @@ func TestBuiltinRuleMetadataComplete(t *testing.T) {
 		}
 	}
 }
+
+// TestCollectorKindIsNotARuleAlias 钉住「规则只消费 Python 契约里的 kind」。
+//
+// 真实流对拍发现：Go 采集器把可疑进程发成 process.suspicious、把首轮持久化
+// 发成 persistence.suspicious，而 Python 版规则里没有这两个 kind 的消费点，
+// 于是同一批事件在 Go 侧一条告警都不出（明细见
+// testdata/parity/REAL-STREAM-REPORT.md 第三节第 1 类差异）。
+//
+// 正确的修法在采集器：事件要按契约映射成 process.start + subject.suspicious_path /
+// masquerade（持久化则是 persistence.add）。**不能**在规则里加 kind 别名——
+// 那会让同一份事件在 Go 多报、Python 不报，对拍当场破裂。这条测试防的就是
+// 那种「顺手在 when 里多认一个 kind」的改法。
+func TestCollectorKindIsNotARuleAlias(t *testing.T) {
+	cases := []struct {
+		name    string
+		rule    string
+		kind    string
+		path    string
+		subject map[string]any
+		want    int
+	}{
+		{
+			name: "process.suspicious 不是 AEG-003 的输入",
+			rule: "AEG-003", kind: "process.suspicious", path: "/tmp/dropper",
+			subject: map[string]any{"suspicious_path": true}, want: 0,
+		},
+		{
+			name: "process.start + suspicious_path 才是契约",
+			rule: "AEG-003", kind: "process.start", path: "/tmp/dropper",
+			subject: map[string]any{"suspicious_path": true}, want: 1,
+		},
+		{
+			name: "persistence.suspicious 不是 AEG-010 的输入",
+			rule: "AEG-010", kind: "persistence.suspicious",
+			path: "/Users/u/Library/LaunchAgents/com.evil.plist", want: 0,
+		},
+		{
+			name: "persistence.add 才是契约",
+			rule: "AEG-010", kind: "persistence.add",
+			path: "/Users/u/Library/LaunchAgents/com.evil.plist", want: 1,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			e, clk, _ := newEngineCfg(t, []Rule{ruleByID(t, tc.rule)}, Config{})
+			event := withPath(ev(tc.kind), tc.path)
+			if tc.subject != nil {
+				event = withSubject(event, tc.subject)
+			}
+			got := feed(e, clk, []*model.Event{event})
+			if len(got) != tc.want {
+				t.Fatalf("%s：期望 %d 条告警，实得 %d 条（%v）——kind 别名必须在采集器修，不在规则里",
+					tc.rule, tc.want, len(got), idsOf(got))
+			}
+		})
+	}
+}

@@ -39,6 +39,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Kur1sulab/atfield/go/internal/model"
@@ -239,6 +240,12 @@ type Persistence struct {
 	known  map[string]persistenceItem
 	seeded bool
 	items  int
+
+	// mu 保护 known/items/seeded。为什么现在才加锁：原先只有 --once
+	// 单线程调用，加锁是空操作；接上 HTTP 之后 Snapshot 会在另一个协程读
+	// known，Go 的 map 并发读写是直接 fatal 的（不是脏读），必须有锁。
+	mu   sync.Mutex
+	seen float64 // 最近一轮采集的完成时刻（Snapshot 的 ts）
 }
 
 // fsView 返回判定用的文件系统视图。
@@ -267,7 +274,11 @@ func NewPersistence(cfg Config) Collector {
 // Items 本轮回填的清点条数（含正常项）。
 // 单条 suspicious 事件只说明「有一条可疑」，控制台更需要「一共清点了多少」，
 // 否则 1000 条里 1 条命中会被读成「只看了 1 条」。
-func (p *Persistence) Items() int { return p.items }
+func (p *Persistence) Items() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.items
+}
 
 // Collect 采集一轮并做差分。
 //
@@ -282,6 +293,8 @@ func (p *Persistence) Items() int { return p.items }
 //
 // 对拍时只比 add/modify/remove 三类，suspicious 额外用来验证「首轮审计」。
 func (p *Persistence) Collect(ctx context.Context) ([]model.Event, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	items, err := p.source(ctx)
 	if err != nil {
 		return nil, err
@@ -340,7 +353,40 @@ func (p *Persistence) Collect(ctx context.Context) ([]model.Event, error) {
 
 	p.seeded = true
 	p.items = len(items)
+	p.seen = nowSeconds()
 	return out, nil
+}
+
+// Snapshot 供 store.set_state("persistence", ...) 使用，键名照 Python 版：
+// count / suspicious / ts（Python 另有 items 全表与 cron 明细，Go 侧
+// persistenceItem 已含全部字段但体积可观，面板只需要清点数与可疑清单）。
+//
+// suspicious 直接复用 known 里上一轮算好的 Susp：重跑判定会再去 stat
+// 一遍所有可执行文件，而面板每秒都可能刷一次，代价不成比例。
+func (p *Persistence) Snapshot() map[string]any {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	sus := make([]map[string]any, 0, 8)
+	for _, it := range p.known {
+		if len(it.Susp) == 0 {
+			continue
+		}
+		sus = append(sus, map[string]any{
+			"kind": it.Kind, "label": it.Label, "path": it.Path,
+			"program": it.Program, "command": it.Command,
+			"scope": it.Scope, "reasons": it.Susp,
+		})
+	}
+	// map 迭代无序：按 path 排序，面板刷新时列表不跳。
+	sort.Slice(sus, func(i, j int) bool {
+		return sus[i]["path"].(string) < sus[j]["path"].(string)
+	})
+	return map[string]any{
+		"count":      len(p.known),
+		"items":      p.items,
+		"suspicious": sus,
+		"ts":         p.seen,
+	}
 }
 
 func (p *Persistence) event(kind string, it *persistenceItem, sus []string, severity string) *model.Event {
