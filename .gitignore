@@ -18,3 +18,7 @@ packaging/dist/
 # 运行时状态
 *.log
 atfield.db
+
+# 对拍用真实事件流：15MB，按 go/testdata/parity/STREAMS.md 里的
+# tools/capture_*.sh 可本地重生（需要真机跑一轮采集），不入库。
+go/testdata/parity/streams/
